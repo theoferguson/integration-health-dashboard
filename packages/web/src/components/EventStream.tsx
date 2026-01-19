@@ -61,18 +61,32 @@ export function EventStream({ events, onEventClick }: EventStreamProps) {
             </div>
           )}
 
-          {event.classification && (
+          {(event.classification || event.resolution) && (
             <div className="mt-2 flex items-center gap-2">
-              <span
-                className={`text-xs px-2 py-0.5 rounded ${
-                  severityColors[event.classification.severity]
-                }`}
-              >
-                {event.classification.severity}
-              </span>
-              <span className="text-xs text-gray-500">
-                {event.classification.category.replace('_', ' ')}
-              </span>
+              {event.classification && (
+                <>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded ${
+                      severityColors[event.classification.severity]
+                    }`}
+                  >
+                    {event.classification.severity}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {event.classification.category.replace('_', ' ')}
+                  </span>
+                </>
+              )}
+              {event.resolution && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded ${
+                    resolutionColors[event.resolution.status]
+                  }`}
+                >
+                  {event.resolution.status === 'resolved' ? '✓ Resolved' :
+                   event.resolution.status === 'acknowledged' ? '● Acknowledged' : '○ Open'}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -86,6 +100,12 @@ const severityColors: Record<string, string> = {
   medium: 'bg-yellow-100 text-yellow-700',
   high: 'bg-orange-100 text-orange-700',
   critical: 'bg-red-100 text-red-700',
+};
+
+const resolutionColors: Record<string, string> = {
+  open: 'bg-red-100 text-red-700',
+  acknowledged: 'bg-yellow-100 text-yellow-700',
+  resolved: 'bg-green-100 text-green-700',
 };
 
 function formatTime(date: Date): string {

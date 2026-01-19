@@ -331,6 +331,188 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('POST /api/events/:id/acknowledge', () => {
+    it('should acknowledge a failure event', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'failure',
+        payload: {},
+        error: { message: 'Test error' },
+      });
+
+      const response = await request(app)
+        .post(`/api/events/${event.id}/acknowledge`)
+        .send({ acknowledged_by: 'test-user' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.resolution.status).toBe('acknowledged');
+      expect(response.body.event.resolution.acknowledgedBy).toBe('test-user');
+      expect(response.body.event.resolution.acknowledgedAt).toBeDefined();
+    });
+
+    it('should return 400 for success events', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'success',
+        payload: {},
+      });
+
+      const response = await request(app).post(
+        `/api/events/${event.id}/acknowledge`
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Only failed events');
+    });
+
+    it('should return 404 for non-existent event', async () => {
+      const response = await request(app).post(
+        '/api/events/non-existent-id/acknowledge'
+      );
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/events/:id/resolve', () => {
+    it('should resolve a failure event', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'failure',
+        payload: {},
+        error: { message: 'Test error' },
+      });
+
+      const response = await request(app)
+        .post(`/api/events/${event.id}/resolve`)
+        .send({ resolved_by: 'test-user', notes: 'Fixed the issue' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.resolution.status).toBe('resolved');
+      expect(response.body.event.resolution.resolvedBy).toBe('test-user');
+      expect(response.body.event.resolution.resolvedAt).toBeDefined();
+      expect(response.body.event.resolution.notes).toBe('Fixed the issue');
+    });
+
+    it('should resolve an acknowledged event', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'failure',
+        payload: {},
+        error: { message: 'Test error' },
+      });
+
+      // First acknowledge
+      await request(app)
+        .post(`/api/events/${event.id}/acknowledge`)
+        .send({ acknowledged_by: 'user1' });
+
+      // Then resolve
+      const response = await request(app)
+        .post(`/api/events/${event.id}/resolve`)
+        .send({ resolved_by: 'user2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.resolution.status).toBe('resolved');
+    });
+
+    it('should return 400 for success events', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'success',
+        payload: {},
+      });
+
+      const response = await request(app).post(
+        `/api/events/${event.id}/resolve`
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should return 404 for non-existent event', async () => {
+      const response = await request(app).post(
+        '/api/events/non-existent-id/resolve'
+      );
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/events/:id/reopen', () => {
+    it('should reopen a resolved event', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'failure',
+        payload: {},
+        error: { message: 'Test error' },
+      });
+
+      // First resolve
+      await request(app)
+        .post(`/api/events/${event.id}/resolve`)
+        .send({ resolved_by: 'user1' });
+
+      // Then reopen
+      const response = await request(app).post(
+        `/api/events/${event.id}/reopen`
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.resolution.status).toBe('open');
+    });
+
+    it('should reopen an acknowledged event', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'failure',
+        payload: {},
+        error: { message: 'Test error' },
+      });
+
+      // First acknowledge
+      await request(app)
+        .post(`/api/events/${event.id}/acknowledge`)
+        .send({ acknowledged_by: 'user1' });
+
+      // Then reopen
+      const response = await request(app).post(
+        `/api/events/${event.id}/reopen`
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.resolution.status).toBe('open');
+    });
+
+    it('should return 400 for success events', async () => {
+      const event = createEvent({
+        integration: 'procore',
+        eventType: 'test',
+        status: 'success',
+        payload: {},
+      });
+
+      const response = await request(app).post(`/api/events/${event.id}/reopen`);
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should return 404 for non-existent event', async () => {
+      const response = await request(app).post(
+        '/api/events/non-existent-id/reopen'
+      );
+
+      expect(response.status).toBe(404);
+    });
+  });
+
   describe('POST /api/simulate', () => {
     it('should seed demo data', async () => {
       const response = await request(app).post('/api/simulate');

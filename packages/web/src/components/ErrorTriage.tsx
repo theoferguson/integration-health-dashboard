@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { IntegrationEvent } from '../types';
-import { classifyEvent } from '../api/client';
+import { classifyEvent, acknowledgeEvent, resolveEvent, reopenEvent } from '../api/client';
 
 interface ErrorTriageProps {
   event: IntegrationEvent;
   onClose: () => void;
-  onClassified: (event: IntegrationEvent) => void;
+  onUpdated: (event: IntegrationEvent) => void;
 }
 
 const integrationLabels: Record<string, string> = {
@@ -34,9 +34,20 @@ const categoryLabels: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) {
+const resolutionStatusColors: Record<string, string> = {
+  open: 'bg-red-100 text-red-800',
+  acknowledged: 'bg-yellow-100 text-yellow-800',
+  resolved: 'bg-green-100 text-green-800',
+};
+
+export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
   const [isClassifying, setIsClassifying] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resolveNotes, setResolveNotes] = useState('');
+  const [showResolveForm, setShowResolveForm] = useState(false);
+
+  const resolutionStatus = event.resolution?.status || 'open';
 
   const handleClassify = async () => {
     setIsClassifying(true);
@@ -44,7 +55,7 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
 
     try {
       const result = await classifyEvent(event.id);
-      onClassified(result.event);
+      onUpdated(result.event);
     } catch (err) {
       setError('Failed to classify error. Please try again.');
     } finally {
@@ -52,13 +63,65 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
     }
   };
 
+  const handleAcknowledge = async () => {
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const result = await acknowledgeEvent(event.id);
+      onUpdated(result.event);
+    } catch (err) {
+      setError('Failed to acknowledge error.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleResolve = async () => {
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const result = await resolveEvent(event.id, undefined, resolveNotes || undefined);
+      onUpdated(result.event);
+      setShowResolveForm(false);
+      setResolveNotes('');
+    } catch (err) {
+      setError('Failed to resolve error.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const result = await reopenEvent(event.id);
+      onUpdated(result.event);
+    } catch (err) {
+      setError('Failed to reopen error.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
+          {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h2 className="text-xl font-semibold">Error Triage</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold">Error Triage</h2>
+                <span
+                  className={`px-2 py-0.5 text-xs font-medium rounded ${resolutionStatusColors[resolutionStatus]}`}
+                >
+                  {resolutionStatus.toUpperCase()}
+                </span>
+              </div>
               <p className="text-sm text-gray-500">
                 {integrationLabels[event.integration]} · {event.eventType}
               </p>
@@ -83,6 +146,45 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
             </button>
           </div>
 
+          {/* Resolution Info */}
+          {event.resolution && event.resolution.status !== 'open' && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+              {event.resolution.status === 'acknowledged' && (
+                <p>
+                  Acknowledged{' '}
+                  {event.resolution.acknowledgedBy && (
+                    <span>by {event.resolution.acknowledgedBy}</span>
+                  )}{' '}
+                  {event.resolution.acknowledgedAt && (
+                    <span className="text-gray-500">
+                      on {new Date(event.resolution.acknowledgedAt).toLocaleString()}
+                    </span>
+                  )}
+                </p>
+              )}
+              {event.resolution.status === 'resolved' && (
+                <>
+                  <p>
+                    Resolved{' '}
+                    {event.resolution.resolvedBy && (
+                      <span>by {event.resolution.resolvedBy}</span>
+                    )}{' '}
+                    {event.resolution.resolvedAt && (
+                      <span className="text-gray-500">
+                        on {new Date(event.resolution.resolvedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </p>
+                  {event.resolution.notes && (
+                    <p className="mt-2 text-gray-600">
+                      Notes: {event.resolution.notes}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Error Details */}
           <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-700 mb-2">
@@ -104,7 +206,7 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
 
           {/* AI Classification */}
           {event.classification ? (
-            <div className="space-y-4">
+            <div className="space-y-4 mb-6">
               <div className="flex items-center gap-3">
                 <span
                   className={`px-3 py-1 rounded-full text-sm font-medium border ${
@@ -165,7 +267,7 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
                 )}
             </div>
           ) : (
-            <div className="text-center py-6">
+            <div className="text-center py-6 mb-6">
               <p className="text-gray-600 mb-4">
                 Click below to analyze this error with AI
               </p>
@@ -176,10 +278,7 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
               >
                 {isClassifying ? (
                   <span className="flex items-center gap-2">
-                    <svg
-                      className="animate-spin h-4 w-4"
-                      viewBox="0 0 24 24"
-                    >
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                       <circle
                         className="opacity-25"
                         cx="12"
@@ -201,9 +300,101 @@ export function ErrorTriage({ event, onClose, onClassified }: ErrorTriageProps) 
                   'Analyze with AI'
                 )}
               </button>
-              {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
             </div>
           )}
+
+          {/* Resolve Form */}
+          {showResolveForm && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Resolution Notes (optional)
+              </h3>
+              <textarea
+                value={resolveNotes}
+                onChange={(e) => setResolveNotes(e.target.value)}
+                placeholder="Describe how this was resolved..."
+                className="w-full p-2 border rounded-lg text-sm"
+                rows={3}
+              />
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleResolve}
+                  disabled={isUpdating}
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isUpdating ? 'Resolving...' : 'Confirm Resolve'}
+                </button>
+                <button
+                  onClick={() => setShowResolveForm(false)}
+                  className="px-4 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="border-t pt-4">
+            {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+
+            <div className="flex gap-3">
+              {resolutionStatus === 'open' && (
+                <>
+                  <button
+                    onClick={handleAcknowledge}
+                    disabled={isUpdating}
+                    className="px-4 py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 disabled:opacity-50"
+                  >
+                    {isUpdating ? 'Updating...' : 'Acknowledge'}
+                  </button>
+                  <button
+                    onClick={() => setShowResolveForm(true)}
+                    disabled={isUpdating}
+                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Resolve
+                  </button>
+                </>
+              )}
+
+              {resolutionStatus === 'acknowledged' && (
+                <>
+                  <button
+                    onClick={() => setShowResolveForm(true)}
+                    disabled={isUpdating}
+                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Resolve
+                  </button>
+                  <button
+                    onClick={handleReopen}
+                    disabled={isUpdating}
+                    className="px-4 py-2 text-gray-600 text-sm border rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Reopen
+                  </button>
+                </>
+              )}
+
+              {resolutionStatus === 'resolved' && (
+                <button
+                  onClick={handleReopen}
+                  disabled={isUpdating}
+                  className="px-4 py-2 text-gray-600 text-sm border rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Reopen
+                </button>
+              )}
+
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-100 ml-auto"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

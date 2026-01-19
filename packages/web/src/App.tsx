@@ -1,11 +1,27 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Dashboard, IntegrationCard, EventStream, ErrorTriage } from './components';
-import { fetchHealth, fetchEvents } from './api/client';
-import type { Integration, IntegrationEvent, HealthOverview } from './types';
+import {
+  Dashboard,
+  IntegrationCard,
+  EventStream,
+  EventsView,
+  ErrorTriage,
+  DataSyncDashboard,
+} from './components';
+import {
+  fetchHealth,
+  fetchEvents,
+  fetchSyncOverview,
+  generateSyncData,
+} from './api/client';
+import type { Integration, IntegrationEvent, HealthOverview, SyncSystemOverview } from './types';
+import type { ErrorStats } from './components/Dashboard';
 
 const API_BASE = '/api';
 
+type TabType = 'integrations' | 'events' | 'sync';
+
 function App() {
+  const [activeTab, setActiveTab] = useState<TabType>('integrations');
   const [health, setHealth] = useState<HealthOverview | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [events, setEvents] = useState<IntegrationEvent[]>([]);
@@ -14,6 +30,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync state
+  const [syncOverview, setSyncOverview] = useState<SyncSystemOverview | null>(null);
+  const [syncRefreshKey, setSyncRefreshKey] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -29,12 +49,22 @@ function App() {
       setIntegrations(healthData.integrations);
       setEvents(eventsData);
       setError(null);
-    } catch (err) {
+    } catch {
       setError('Failed to load data. Is the API server running?');
     } finally {
       setIsLoading(false);
     }
   }, [filter]);
+
+  const loadSyncOverview = useCallback(async () => {
+    try {
+      const data = await fetchSyncOverview();
+      setSyncOverview(data.overview);
+    } catch {
+      // No sync data yet - that's ok
+      setSyncOverview(null);
+    }
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -43,19 +73,45 @@ function App() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  const handleEventClassified = (updatedEvent: IntegrationEvent) => {
+  useEffect(() => {
+    if (activeTab === 'sync') {
+      loadSyncOverview();
+    }
+  }, [activeTab, loadSyncOverview]);
+
+  const handleEventUpdated = (updatedEvent: IntegrationEvent) => {
     setEvents((prev) =>
       prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e))
     );
     setSelectedEvent(updatedEvent);
   };
 
+  // Calculate error stats from events
+  const errorStats: ErrorStats = events.reduce(
+    (stats, event) => {
+      if (event.status === 'failure') {
+        stats.total++;
+        const resolutionStatus = event.resolution?.status || 'open';
+        if (resolutionStatus === 'open') stats.open++;
+        else if (resolutionStatus === 'acknowledged') stats.acknowledged++;
+        else if (resolutionStatus === 'resolved') stats.resolved++;
+      }
+      return stats;
+    },
+    { total: 0, open: 0, acknowledged: 0, resolved: 0 }
+  );
+
   const runSimulation = async () => {
     setIsSimulating(true);
     try {
       await fetch(`${API_BASE}/simulate?reset=true`, { method: 'POST' });
+      await generateSyncData(5, true);
       await loadData();
-    } catch (err) {
+      if (activeTab === 'sync') {
+        await loadSyncOverview();
+        setSyncRefreshKey((k) => k + 1);
+      }
+    } catch {
       setError('Failed to run simulation');
     } finally {
       setIsSimulating(false);
@@ -84,7 +140,7 @@ function App() {
                 Integration Health Dashboard
               </h1>
               <p className="text-sm text-gray-500">
-                Monitor and triage third-party integration issues
+                Monitor integrations and track data sync status
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -96,7 +152,7 @@ function App() {
                 {isSimulating ? 'Simulating...' : 'Run Demo'}
               </button>
               <button
-                onClick={loadData}
+                onClick={activeTab === 'integrations' ? loadData : () => { loadSyncOverview(); setSyncRefreshKey((k) => k + 1); }}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Refresh
@@ -111,6 +167,51 @@ function App() {
               </a>
             </div>
           </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-4 -mb-px">
+            <button
+              onClick={() => setActiveTab('integrations')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+                activeTab === 'integrations'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Integrations
+            </button>
+            <button
+              onClick={() => setActiveTab('events')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+                activeTab === 'events'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              All Events
+            </button>
+            <button
+              onClick={() => setActiveTab('sync')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+                activeTab === 'sync'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Data Sync
+              {syncOverview && (syncOverview.failingInstances > 0 || syncOverview.staleInstances > 0) && (
+                <span
+                  className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+                    syncOverview.failingInstances > 0
+                      ? 'bg-red-100 text-red-600'
+                      : 'bg-yellow-100 text-yellow-600'
+                  }`}
+                >
+                  {syncOverview.failingInstances + syncOverview.staleInstances}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -124,64 +225,70 @@ function App() {
           </div>
         )}
 
-        {/* Health Overview */}
-        {health && (
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              System Health
-            </h2>
-            <Dashboard health={health} />
-          </section>
+        {activeTab === 'integrations' && (
+          <>
+            {/* Health Overview */}
+            {health && (
+              <section className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">System Health</h2>
+                <Dashboard health={health} errorStats={errorStats} />
+              </section>
+            )}
+
+            {/* Integrations Grid */}
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Integrations</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {integrations.map((integration) => (
+                  <IntegrationCard key={integration.id} integration={integration} />
+                ))}
+              </div>
+            </section>
+
+            {/* Event Stream */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Recent Events</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setFilter('all')}
+                    className={`px-3 py-1 text-sm rounded-lg ${
+                      filter === 'all'
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setFilter('failures')}
+                    className={`px-3 py-1 text-sm rounded-lg ${
+                      filter === 'failures'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Failures Only
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <EventStream events={events} onEventClick={setSelectedEvent} />
+              </div>
+            </section>
+          </>
         )}
 
-        {/* Integrations Grid */}
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Integrations
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {integrations.map((integration) => (
-              <IntegrationCard
-                key={integration.id}
-                integration={integration}
-              />
-            ))}
-          </div>
-        </section>
+        {activeTab === 'events' && (
+          <EventsView onEventClick={setSelectedEvent} />
+        )}
 
-        {/* Event Stream */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Recent Events
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-3 py-1 text-sm rounded-lg ${
-                  filter === 'all'
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilter('failures')}
-                className={`px-3 py-1 text-sm rounded-lg ${
-                  filter === 'failures'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Failures Only
-              </button>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <EventStream events={events} onEventClick={setSelectedEvent} />
-          </div>
-        </section>
+        {activeTab === 'sync' && (
+          <DataSyncDashboard
+            key={syncRefreshKey}
+            onRefresh={() => { loadSyncOverview(); }}
+          />
+        )}
       </main>
 
       {/* Error Triage Modal */}
@@ -189,7 +296,7 @@ function App() {
         <ErrorTriage
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          onClassified={handleEventClassified}
+          onUpdated={handleEventUpdated}
         />
       )}
 
@@ -197,12 +304,11 @@ function App() {
       <footer className="border-t border-gray-200 mt-12 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
           <p>
-            Built by Theo Ferguson · AI-native integration monitoring for
-            construction software
+            Built by Theo Ferguson · AI-native integration monitoring for construction software
           </p>
           <p className="mt-1">
-            Demonstrating full-stack TypeScript, AI-assisted error classification,
-            and domain-aware design
+            Demonstrating full-stack TypeScript, AI-assisted error classification, data sync
+            monitoring, and domain-aware design
           </p>
         </div>
       </footer>

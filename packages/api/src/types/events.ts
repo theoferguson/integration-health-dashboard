@@ -2,6 +2,7 @@ import type { IntegrationType } from './integrations.js';
 
 export type EventStatus = 'success' | 'failure' | 'pending';
 export type ErrorSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type ResolutionStatus = 'open' | 'acknowledged' | 'resolved';
 export type ErrorCategory =
   | 'auth'
   | 'rate_limit'
@@ -11,6 +12,15 @@ export type ErrorCategory =
   | 'spending_control'
   | 'compliance'
   | 'unknown';
+
+export interface Resolution {
+  status: ResolutionStatus;
+  acknowledgedAt?: Date;
+  acknowledgedBy?: string;
+  resolvedAt?: Date;
+  resolvedBy?: string;
+  notes?: string;
+}
 
 export interface IntegrationEvent {
   id: string;
@@ -25,6 +35,7 @@ export interface IntegrationEvent {
     context?: Record<string, unknown>;
   };
   classification?: ErrorClassification;
+  resolution?: Resolution;
 }
 
 export interface ErrorClassification {

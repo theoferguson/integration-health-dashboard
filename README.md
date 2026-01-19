@@ -27,6 +27,7 @@ A dashboard that:
 - **System Health Overview** — Real-time status of all integrations
 - **Event Stream** — Chronological log of sync events and failures
 - **AI Error Triage** — Click any failure to get AI-generated analysis, root cause, and suggested fix
+- **Payroll Budgeting & Reconciliation** — Cross-system reconciliation between Gusto payroll, QuickBooks GL, and Procore budgets with budget tracking
 - **Construction Domain Awareness** — AI understands job costing, prevailing wage, certified payroll
 
 ## Why AI (and Why Not Everywhere)
@@ -58,6 +59,28 @@ The dashboard simulates 5 integrations relevant to construction contractor softw
 
 Each integration includes realistic error scenarios: auth failures, rate limits, data validation, and domain-specific issues.
 
+## Payroll Budgeting & Reconciliation
+
+The dashboard includes a budgeting and reconciliation module that compares data across systems to detect discrepancies and track project budgets:
+
+### Reconciliation Checks
+
+| Check | Source | Target | What It Detects |
+|-------|--------|--------|-----------------|
+| Gross Wages to GL | Gusto | QuickBooks | Missing payroll journal entries |
+| Tax Liability | Gusto | QuickBooks | Tax accrual timing differences |
+| Net Pay | Gusto | QuickBooks | Payroll liability discrepancies |
+| Unallocated Labor | Gusto | Procore | Labor costs not coded to projects |
+| Budget Variance | Procore | Procore | Projects over labor budget |
+
+### Features
+
+- **Pay Period Selector** — View reconciliation for current or historical pay periods
+- **Variance Detection** — Automatic identification of mismatches with severity levels
+- **AI Analysis** — Click any discrepancy to get AI-generated root cause analysis and suggested fixes
+- **Project Budget Tracking** — Visual progress bars showing budget utilization
+- **Excel Export** — Download reports with Summary, Checks, Budgets, Employees, and GL Entries sheets
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -77,12 +100,12 @@ integration-health-dashboard/
 ├── packages/
 │   ├── api/                      # Express backend
 │   │   └── src/
-│   │       ├── routes/           # Webhook receivers, events, integrations
-│   │       ├── services/         # Event store, health calculator, AI classifier
+│   │       ├── routes/           # Webhook receivers, events, integrations, budgeting
+│   │       ├── services/         # Event store, health calculator, AI classifier, budgeting
 │   │       └── types/            # TypeScript types
 │   ├── web/                      # React frontend
 │   │   └── src/
-│   │       ├── components/       # Dashboard, EventStream, ErrorTriage
+│   │       ├── components/       # Dashboard, EventStream, ErrorTriage, PayrollReconciliationDashboard
 │   │       └── api/              # API client
 │   └── simulator/                # Webhook simulator
 │       └── src/scenarios/        # Per-integration test scenarios
@@ -152,13 +175,14 @@ Clarity over polish. The dashboard prioritizes information density and actionabi
 
 With more time, I would add:
 
-1. **Persistent storage** — MongoDB for events, integration configs
+1. **Persistent storage** — MongoDB for events, integration configs, budgeting history
 2. **Alerting** — Configurable thresholds, Slack/email notifications
 3. **Retry queue** — Automatic retry with exponential backoff
 4. **Integration-specific SLAs** — Health scores based on expected sync frequency
 5. **Team assignment** — Route errors to responsible engineers
 6. **Audit log** — Track who acknowledged/resolved issues
 7. **Real webhook verification** — Stripe signature verification, OAuth token management
+8. **Budgeting scheduling** — Automatic budget reconciliation runs on payroll close
 
 ## Deployment
 
