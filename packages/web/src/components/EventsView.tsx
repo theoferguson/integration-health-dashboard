@@ -138,10 +138,10 @@ export function EventsView({ onEventClick }: EventsViewProps) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
+        <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-4">
           {/* Search */}
-          <div className="flex-1 min-w-[200px]">
+          <div className="w-full sm:flex-1 sm:min-w-[200px]">
             <input
               type="text"
               placeholder="Search events..."
@@ -151,63 +151,70 @@ export function EventsView({ onEventClick }: EventsViewProps) {
             />
           </div>
 
-          {/* Integration filter */}
-          <select
-            value={integrationFilter}
-            onChange={(e) => { setIntegrationFilter(e.target.value as IntegrationType | ''); setPage(0); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-          >
-            <option value="">All Integrations</option>
-            {integrationOptions.map((int) => (
-              <option key={int} value={int}>{integrationLabels[int]}</option>
-            ))}
-          </select>
+          {/* Filter row on mobile */}
+          <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-4">
+            {/* Integration filter */}
+            <select
+              value={integrationFilter}
+              onChange={(e) => { setIntegrationFilter(e.target.value as IntegrationType | ''); setPage(0); }}
+              className="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm bg-white"
+            >
+              <option value="">All Integrations</option>
+              {integrationOptions.map((int) => (
+                <option key={int} value={int}>{integrationLabels[int]}</option>
+              ))}
+            </select>
 
-          {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value as 'success' | 'failure' | ''); setPage(0); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-          >
-            <option value="">All Statuses</option>
-            <option value="success">Success</option>
-            <option value="failure">Failure</option>
-          </select>
+            {/* Status filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value as 'success' | 'failure' | ''); setPage(0); }}
+              className="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm bg-white"
+            >
+              <option value="">All Status</option>
+              <option value="success">Success</option>
+              <option value="failure">Failure</option>
+            </select>
 
-          {/* Resolution filter */}
-          <select
-            value={resolutionFilter}
-            onChange={(e) => { setResolutionFilter(e.target.value as ResolutionStatus | ''); setPage(0); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-          >
-            <option value="">All Resolutions</option>
-            <option value="open">Open</option>
-            <option value="acknowledged">Acknowledged</option>
-            <option value="resolved">Resolved</option>
-          </select>
+            {/* Resolution filter */}
+            <select
+              value={resolutionFilter}
+              onChange={(e) => { setResolutionFilter(e.target.value as ResolutionStatus | ''); setPage(0); }}
+              className="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm bg-white"
+            >
+              <option value="">All Resolution</option>
+              <option value="open">Open</option>
+              <option value="acknowledged">Acknowledged</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
 
-          {/* Export button */}
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export CSV
-          </button>
+          {/* Action buttons */}
+          <div className="flex gap-2 sm:gap-4">
+            {/* Export button */}
+            <button
+              onClick={handleExportCSV}
+              className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="hidden sm:inline">Export CSV</span>
+              <span className="sm:hidden">Export</span>
+            </button>
 
-          {/* Refresh */}
-          <button
-            onClick={loadEvents}
-            className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Refresh
-          </button>
+            {/* Refresh */}
+            <button
+              onClick={loadEvents}
+              className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Results count */}
-        <div className="mt-3 text-sm text-gray-500">
+        <div className="mt-3 text-xs sm:text-sm text-gray-500">
           Showing {events.length} of {total} events
           {(integrationFilter || statusFilter || resolutionFilter || debouncedSearch) && (
             <button
@@ -334,52 +341,59 @@ export function EventsView({ onEventClick }: EventsViewProps) {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-700">Rows per page:</span>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-4 py-3 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between sm:justify-start gap-2">
+              <span className="text-xs sm:text-sm text-gray-700">Rows:</span>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
-                className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                className="px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm bg-white"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
+              <span className="text-xs sm:text-sm text-gray-700 sm:hidden">
+                {page + 1}/{totalPages}
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-700">
+            <div className="flex items-center justify-center gap-1 sm:gap-2">
+              <span className="text-sm text-gray-700 hidden sm:inline">
                 Page {page + 1} of {totalPages}
               </span>
               <button
                 onClick={() => setPage(0)}
                 disabled={page === 0}
-                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                First
+                <span className="hidden sm:inline">First</span>
+                <span className="sm:hidden">«</span>
               </button>
               <button
                 onClick={() => setPage(page - 1)}
                 disabled={page === 0}
-                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Prev
+                <span className="hidden sm:inline">Prev</span>
+                <span className="sm:hidden">‹</span>
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={page >= totalPages - 1}
-                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Next
+                <span className="hidden sm:inline">Next</span>
+                <span className="sm:hidden">›</span>
               </button>
               <button
                 onClick={() => setPage(totalPages - 1)}
                 disabled={page >= totalPages - 1}
-                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Last
+                <span className="hidden sm:inline">Last</span>
+                <span className="sm:hidden">»</span>
               </button>
             </div>
           </div>

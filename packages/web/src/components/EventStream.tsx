@@ -31,60 +31,60 @@ export function EventStream({ events, onEventClick }: EventStreamProps) {
         <div
           key={event.id}
           onClick={() => onEventClick(event)}
-          className={`p-3 rounded border cursor-pointer transition-all hover:shadow-sm ${
+          className={`p-2 sm:p-3 rounded border cursor-pointer transition-all hover:shadow-sm ${
             event.status === 'failure'
               ? 'bg-red-50 border-red-200 hover:bg-red-100'
               : 'bg-white border-gray-200 hover:bg-gray-50'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
                   event.status === 'failure' ? 'bg-red-500' : 'bg-green-500'
                 }`}
               />
-              <span className="font-medium text-sm">
+              <span className="font-medium text-xs sm:text-sm">
                 {integrationLabels[event.integration] || event.integration}
               </span>
-              <span className="text-gray-400">·</span>
-              <span className="text-sm text-gray-600">{event.eventType}</span>
+              <span className="text-gray-400 hidden sm:inline">·</span>
+              <span className="text-xs sm:text-sm text-gray-600">{event.eventType}</span>
             </div>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-400 ml-3.5 sm:ml-0">
               {formatTime(new Date(event.timestamp))}
             </span>
           </div>
 
           {event.status === 'failure' && event.error && (
-            <div className="mt-2 text-sm text-red-700 truncate">
+            <div className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-red-700 truncate">
               {event.error.message}
             </div>
           )}
 
           {(event.classification || event.resolution) && (
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-1.5 sm:mt-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {event.classification && (
                 <>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded ${
+                    className={`text-xs px-1.5 sm:px-2 py-0.5 rounded ${
                       severityColors[event.classification.severity]
                     }`}
                   >
                     {event.classification.severity}
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-gray-500 hidden sm:inline">
                     {event.classification.category.replace('_', ' ')}
                   </span>
                 </>
               )}
               {event.resolution && (
                 <span
-                  className={`text-xs px-2 py-0.5 rounded ${
+                  className={`text-xs px-1.5 sm:px-2 py-0.5 rounded ${
                     resolutionColors[event.resolution.status]
                   }`}
                 >
                   {event.resolution.status === 'resolved' ? '✓ Resolved' :
-                   event.resolution.status === 'acknowledged' ? '● Acknowledged' : '○ Open'}
+                   event.resolution.status === 'acknowledged' ? '● Ack' : '○ Open'}
                 </span>
               )}
             </div>

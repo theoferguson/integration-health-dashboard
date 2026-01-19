@@ -134,26 +134,26 @@ function App() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
                 Integration Health Dashboard
               </h1>
-              <p className="text-sm text-gray-500">
+              <p className="text-xs sm:text-sm text-gray-500">
                 Monitor integrations and track data sync status
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
               <button
                 onClick={runSimulation}
                 disabled={isSimulating}
-                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSimulating ? 'Simulating...' : 'Run Demo'}
               </button>
               <button
                 onClick={activeTab === 'integrations' ? loadData : () => { loadSyncOverview(); setSyncRefreshKey((k) => k + 1); }}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Refresh
               </button>
@@ -161,55 +161,51 @@ function App() {
                 href="https://github.com/theoferguson/integration-health-dashboard"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800"
               >
-                View Source
+                Source
               </a>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mt-4 -mb-px">
+          <div className="flex gap-1 mt-4 -mb-px overflow-x-auto">
             <button
               onClick={() => setActiveTab('integrations')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-                activeTab === 'integrations'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${activeTab === 'integrations'
+                ? 'border-blue-600 text-blue-600 bg-blue-50'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               Integrations
             </button>
             <button
-              onClick={() => setActiveTab('events')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-                activeTab === 'events'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              All Events
-            </button>
-            <button
               onClick={() => setActiveTab('sync')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-                activeTab === 'sync'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${activeTab === 'sync'
+                ? 'border-blue-600 text-blue-600 bg-blue-50'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               Data Sync
               {syncOverview && (syncOverview.failingInstances > 0 || syncOverview.staleInstances > 0) && (
                 <span
-                  className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                    syncOverview.failingInstances > 0
-                      ? 'bg-red-100 text-red-600'
-                      : 'bg-yellow-100 text-yellow-600'
-                  }`}
+                  className={`ml-1 sm:ml-2 px-1.5 py-0.5 text-xs rounded-full ${syncOverview.failingInstances > 0
+                    ? 'bg-red-100 text-red-600'
+                    : 'bg-yellow-100 text-yellow-600'
+                    }`}
                 >
                   {syncOverview.failingInstances + syncOverview.staleInstances}
                 </span>
               )}
+            </button>
+            <button
+              onClick={() => setActiveTab('events')}
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${activeTab === 'events'
+                ? 'border-blue-600 text-blue-600 bg-blue-50'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+            >
+              All Events
             </button>
           </div>
         </div>
@@ -229,16 +225,16 @@ function App() {
           <>
             {/* Health Overview */}
             {health && (
-              <section className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">System Health</h2>
+              <section className="mb-6 sm:mb-8">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">System Health</h2>
                 <Dashboard health={health} errorStats={errorStats} />
               </section>
             )}
 
             {/* Integrations Grid */}
             <section className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Integrations</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Integrations</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {integrations.map((integration) => (
                   <IntegrationCard key={integration.id} integration={integration} />
                 ))}
@@ -247,32 +243,30 @@ function App() {
 
             {/* Event Stream */}
             <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Events</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">Recent Events</h2>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setFilter('all')}
-                    className={`px-3 py-1 text-sm rounded-lg ${
-                      filter === 'all'
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg ${filter === 'all'
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
                   >
                     All
                   </button>
                   <button
                     onClick={() => setFilter('failures')}
-                    className={`px-3 py-1 text-sm rounded-lg ${
-                      filter === 'failures'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg ${filter === 'failures'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
                   >
                     Failures Only
                   </button>
                 </div>
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
                 <EventStream events={events} onEventClick={setSelectedEvent} />
               </div>
             </section>
@@ -301,12 +295,12 @@ function App() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 mt-12 py-6">
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
+      <footer className="border-t border-gray-200 mt-8 sm:mt-12 py-4 sm:py-6">
+        <div className="max-w-7xl mx-auto px-4 text-center text-xs sm:text-sm text-gray-500">
           <p>
-            Built by Theo Ferguson · AI-native integration monitoring for construction software
+            Built by Theo Ferguson · AI-native integration monitoring
           </p>
-          <p className="mt-1">
+          <p className="mt-1 hidden sm:block">
             Demonstrating full-stack TypeScript, AI-assisted error classification, data sync
             monitoring, and domain-aware design
           </p>

@@ -25,29 +25,29 @@ export function IntegrationCard({ integration, onClick }: IntegrationCardProps) 
   return (
     <div
       onClick={onClick}
-      className={`p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+      className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
         statusColors[integration.status]
       }`}
     >
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-lg">{integration.name}</h3>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+        <h3 className="font-semibold text-base sm:text-lg">{integration.name}</h3>
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <span
             className={`w-2 h-2 rounded-full ${statusDots[integration.status]}`}
           />
-          <span className="text-sm capitalize">{integration.status}</span>
+          <span className="text-xs sm:text-sm capitalize">{integration.status}</span>
         </div>
       </div>
 
-      <p className="text-sm opacity-75 mb-3">{integration.description}</p>
+      <p className="text-xs sm:text-sm opacity-75 mb-2 sm:mb-3 line-clamp-2">{integration.description}</p>
 
-      <div className="grid grid-cols-3 gap-2 text-sm">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-xs sm:text-sm">
         <div>
-          <div className="opacity-60">Success Rate</div>
+          <div className="opacity-60">Success</div>
           <div className="font-medium">{integration.successRate}%</div>
         </div>
         <div>
-          <div className="opacity-60">Events (24h)</div>
+          <div className="opacity-60">Events</div>
           <div className="font-medium">{integration.eventsLast24h}</div>
         </div>
         <div>
@@ -57,9 +57,9 @@ export function IntegrationCard({ integration, onClick }: IntegrationCardProps) 
       </div>
 
       {integration.errorsLast24h > 0 && (
-        <div className="mt-3 pt-3 border-t border-current border-opacity-20">
-          <span className="text-sm font-medium">
-            {integration.errorsLast24h} error{integration.errorsLast24h !== 1 ? 's' : ''} in last 24h
+        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20">
+          <span className="text-xs sm:text-sm font-medium">
+            {integration.errorsLast24h} error{integration.errorsLast24h !== 1 ? 's' : ''} in 24h
           </span>
         </div>
       )}

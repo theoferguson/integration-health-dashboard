@@ -16,7 +16,7 @@ export function Dashboard({ health, errorStats }: DashboardProps) {
   return (
     <div className="space-y-4">
       {/* Integration Health */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           label="Total Integrations"
           value={health.totalIntegrations}
@@ -39,7 +39,7 @@ export function Dashboard({ health, errorStats }: DashboardProps) {
 
       {/* Error Resolution Stats */}
       {errorStats && errorStats.total > 0 && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             label="Total Errors"
             value={errorStats.total}
@@ -97,16 +97,16 @@ const textColors = {
 
 function StatCard({ label, value, color, icon, subtitle }: StatCardProps) {
   return (
-    <div className={`p-4 rounded-lg border ${colorClasses[color]}`}>
+    <div className={`p-3 sm:p-4 rounded-lg border ${colorClasses[color]}`}>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-600">{label}</span>
-        {icon && <span className="text-lg">{icon}</span>}
+        <span className="text-xs sm:text-sm text-gray-600">{label}</span>
+        {icon && <span className="text-base sm:text-lg">{icon}</span>}
       </div>
-      <div className={`text-3xl font-bold mt-1 ${textColors[color]}`}>
+      <div className={`text-2xl sm:text-3xl font-bold mt-1 ${textColors[color]}`}>
         {value}
       </div>
       {subtitle && (
-        <div className="text-xs text-gray-500 mt-1">{subtitle}</div>
+        <div className="text-xs text-gray-500 mt-1 truncate">{subtitle}</div>
       )}
     </div>
   );

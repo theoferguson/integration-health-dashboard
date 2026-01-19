@@ -150,8 +150,8 @@ export function DataSyncDashboard({ onRefresh }: DataSyncDashboardProps) {
       {/* System Overview */}
       {overview && (
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">System Overview</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">System Overview</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
             <OverviewCard
               label="Overall Health"
               value={`${Math.round(overview.overallHealth)}%`}
@@ -177,9 +177,9 @@ export function DataSyncDashboard({ onRefresh }: DataSyncDashboardProps) {
       {/* Pipeline Stats */}
       {overview && overview.pipelineStats.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Health</h2>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Pipeline Health</h2>
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pipeline</th>
@@ -204,23 +204,23 @@ export function DataSyncDashboard({ onRefresh }: DataSyncDashboardProps) {
       {/* Failing Instances Alert */}
       {overview && overview.recentFailures.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2">
             <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
             Failing Instances
           </h2>
           <div className="bg-red-50 border border-red-200 rounded-lg divide-y divide-red-200">
             {overview.recentFailures.map((failure) => (
-              <div key={failure.instanceId} className="p-4">
-                <div className="flex items-start justify-between">
+              <div key={failure.instanceId} className="p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div>
-                    <div className="font-medium text-red-900">{failure.clientName}</div>
-                    <div className="text-sm text-red-700">
+                    <div className="font-medium text-red-900 text-sm sm:text-base">{failure.clientName}</div>
+                    <div className="text-xs sm:text-sm text-red-700">
                       {failure.pipeline.name} ({integrationLabels[failure.pipeline.integration]})
                     </div>
-                    <div className="text-sm text-red-600 mt-1">{failure.lastError}</div>
+                    <div className="text-xs sm:text-sm text-red-600 mt-1 break-words">{failure.lastError}</div>
                   </div>
-                  <div className="text-right text-sm">
-                    <div className="text-red-700">{failure.consecutiveFailures} consecutive failures</div>
+                  <div className="text-left sm:text-right text-xs sm:text-sm flex sm:flex-col gap-2 sm:gap-0 flex-wrap">
+                    <div className="text-red-700">{failure.consecutiveFailures} failures</div>
                     <div className="text-red-600">Since {formatRelativeTime(failure.failingSince)}</div>
                   </div>
                 </div>
@@ -232,25 +232,25 @@ export function DataSyncDashboard({ onRefresh }: DataSyncDashboardProps) {
 
       {/* Filters */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Sync Instances</h2>
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900">Sync Instances</h2>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             <select
               value={selectedClient}
               onChange={(e) => setSelectedClient(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white"
+              className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg bg-white"
             >
               <option value="all">All Clients</option>
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>{client.name}</option>
               ))}
             </select>
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
               {(['all', 'healthy', 'stale', 'failing', 'disabled'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-md transition-colors whitespace-nowrap ${
                     statusFilter === status
                       ? 'bg-white shadow text-gray-900'
                       : 'text-gray-600 hover:text-gray-900'
@@ -262,7 +262,7 @@ export function DataSyncDashboard({ onRefresh }: DataSyncDashboardProps) {
             </div>
             <button
               onClick={() => { loadData(); onRefresh(); }}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-3 py-1.5 text-xs sm:text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Refresh
             </button>
@@ -317,9 +317,9 @@ function OverviewCard({
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="text-sm text-gray-500">{label}</div>
-      <div className={`text-2xl font-semibold ${colorClasses[color]}`}>{value}</div>
+    <div className="bg-white rounded-lg border border-gray-200 p-2 sm:p-4">
+      <div className="text-xs sm:text-sm text-gray-500 truncate">{label}</div>
+      <div className={`text-lg sm:text-2xl font-semibold ${colorClasses[color]}`}>{value}</div>
     </div>
   );
 }
@@ -400,31 +400,31 @@ function InstanceRow({
   return (
     <div>
       <div
-        className="p-4 hover:bg-gray-50 cursor-pointer"
+        className="p-3 sm:p-4 hover:bg-gray-50 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className={`h-2.5 w-2.5 rounded-full ${statusDotColors[instance.status]}`} />
-            <div>
-              <div className="font-medium text-gray-900">{instance.clientName}</div>
-              <div className="text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className={`h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0 ${statusDotColors[instance.status]}`} />
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{instance.clientName}</div>
+              <div className="text-xs sm:text-sm text-gray-500 truncate">
                 {instance.pipeline.name} ({integrationLabels[instance.pipeline.integration]})
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-sm text-gray-900">
-                Last sync: {formatRelativeTime(instance.lastSync?.completedAt ?? null)}
+          <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 ml-4 sm:ml-0">
+            <div className="text-left sm:text-right min-w-0">
+              <div className="text-xs sm:text-sm text-gray-900">
+                Last: {formatRelativeTime(instance.lastSync?.completedAt ?? null)}
               </div>
-              <div className="text-xs text-gray-500">
-                {instance.stats.last24h.totalSyncs} syncs in 24h ({instance.stats.last24h.successRate.toFixed(0)}% success)
+              <div className="text-xs text-gray-500 hidden sm:block">
+                {instance.stats.last24h.totalSyncs} syncs ({instance.stats.last24h.successRate.toFixed(0)}%)
               </div>
             </div>
 
-            <span className={`px-2 py-1 text-xs font-medium rounded-full border ${statusColors[instance.status]}`}>
+            <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-medium rounded-full border whitespace-nowrap ${statusColors[instance.status]}`}>
               {instance.status}
             </span>
 
@@ -434,13 +434,13 @@ function InstanceRow({
                 onTriggerSync(instance.id);
               }}
               disabled={isSyncing || !instance.enabled}
-              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 sm:px-3 py-1 text-xs sm:text-sm text-blue-600 hover:text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {isSyncing ? 'Syncing...' : 'Sync Now'}
+              {isSyncing ? 'Syncing...' : 'Sync'}
             </button>
 
             <svg
-              className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 sm:w-5 sm:h-5 text-gray-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -452,26 +452,26 @@ function InstanceRow({
       </div>
 
       {expanded && (
-        <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
-          <div className="pt-4">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Recent Executions</h4>
+        <div className="px-3 sm:px-4 pb-3 sm:pb-4 bg-gray-50 border-t border-gray-100">
+          <div className="pt-3 sm:pt-4">
+            <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Recent Executions</h4>
             {instance.recentExecutions.length === 0 ? (
-              <p className="text-sm text-gray-500">No recent executions</p>
+              <p className="text-xs sm:text-sm text-gray-500">No recent executions</p>
             ) : (
               <div className="space-y-2">
                 {instance.recentExecutions.slice(0, 5).map((exec) => (
                   <div
                     key={exec.id}
-                    className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-gray-300 cursor-pointer"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 p-2 bg-white rounded border border-gray-200 hover:border-gray-300 cursor-pointer"
                     onClick={() => onViewExecution(exec.id)}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <ExecutionStatusBadge status={exec.status} />
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs sm:text-sm text-gray-600">
                         {new Date(exec.startedAt).toLocaleString()}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500 ml-0 sm:ml-0">
                       <span>{exec.recordsProcessed} records</span>
                       <span>{formatDuration(exec.durationMs)}</span>
                       {exec.errors > 0 && (
@@ -483,10 +483,10 @@ function InstanceRow({
               </div>
             )}
 
-            <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <h5 className="text-xs font-medium text-gray-500 uppercase mb-2">Last 24 Hours</h5>
-                <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
                   <div>
                     <div className="text-gray-500">Total</div>
                     <div className="font-medium">{instance.stats.last24h.totalSyncs}</div>
@@ -503,13 +503,13 @@ function InstanceRow({
               </div>
               <div>
                 <h5 className="text-xs font-medium text-gray-500 uppercase mb-2">Last 7 Days</h5>
-                <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
                   <div>
                     <div className="text-gray-500">Total</div>
                     <div className="font-medium">{instance.stats.last7d.totalSyncs}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Success Rate</div>
+                    <div className="text-gray-500">Rate</div>
                     <div className="font-medium">{instance.stats.last7d.successRate.toFixed(1)}%</div>
                   </div>
                   <div>
@@ -549,40 +549,40 @@ function ExecutionModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Execution Details</h3>
-            <p className="text-sm text-gray-500">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Execution Details</h3>
+            <p className="text-xs sm:text-sm text-gray-500 truncate">
               {execution.clientName} - {execution.pipeline.name}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 ml-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-6">
           {/* Summary */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <div>
-              <div className="text-sm text-gray-500">Status</div>
+              <div className="text-xs sm:text-sm text-gray-500">Status</div>
               <ExecutionStatusBadge status={execution.status} />
             </div>
             <div>
-              <div className="text-sm text-gray-500">Duration</div>
-              <div className="font-medium">{formatDuration(execution.response?.durationMs || 0)}</div>
+              <div className="text-xs sm:text-sm text-gray-500">Duration</div>
+              <div className="font-medium text-sm">{formatDuration(execution.response?.durationMs || 0)}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-500">Started</div>
-              <div className="font-medium text-sm">{new Date(execution.startedAt).toLocaleString()}</div>
+              <div className="text-xs sm:text-sm text-gray-500">Started</div>
+              <div className="font-medium text-xs sm:text-sm">{new Date(execution.startedAt).toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-500">Triggered By</div>
-              <div className="font-medium capitalize">{execution.triggeredBy}</div>
+              <div className="text-xs sm:text-sm text-gray-500">Triggered By</div>
+              <div className="font-medium text-sm capitalize">{execution.triggeredBy}</div>
             </div>
           </div>
 
@@ -626,26 +626,26 @@ function ExecutionModal({
 
           {/* Results */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Results</h4>
-            <div className="grid grid-cols-5 gap-4 text-center">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-2xl font-semibold text-gray-900">{execution.results.recordsFetched}</div>
+            <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Results</h4>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4 text-center">
+              <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                <div className="text-lg sm:text-2xl font-semibold text-gray-900">{execution.results.recordsFetched}</div>
                 <div className="text-xs text-gray-500">Fetched</div>
               </div>
-              <div className="bg-green-50 rounded-lg p-3">
-                <div className="text-2xl font-semibold text-green-600">{execution.results.recordsCreated}</div>
+              <div className="bg-green-50 rounded-lg p-2 sm:p-3">
+                <div className="text-lg sm:text-2xl font-semibold text-green-600">{execution.results.recordsCreated}</div>
                 <div className="text-xs text-gray-500">Created</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3">
-                <div className="text-2xl font-semibold text-blue-600">{execution.results.recordsUpdated}</div>
+              <div className="bg-blue-50 rounded-lg p-2 sm:p-3">
+                <div className="text-lg sm:text-2xl font-semibold text-blue-600">{execution.results.recordsUpdated}</div>
                 <div className="text-xs text-gray-500">Updated</div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-2xl font-semibold text-gray-600">{execution.results.recordsSkipped}</div>
+              <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                <div className="text-lg sm:text-2xl font-semibold text-gray-600">{execution.results.recordsSkipped}</div>
                 <div className="text-xs text-gray-500">Skipped</div>
               </div>
-              <div className="bg-red-50 rounded-lg p-3">
-                <div className="text-2xl font-semibold text-red-600">{execution.results.recordsFailed}</div>
+              <div className="bg-red-50 rounded-lg p-2 sm:p-3">
+                <div className="text-lg sm:text-2xl font-semibold text-red-600">{execution.results.recordsFailed}</div>
                 <div className="text-xs text-gray-500">Failed</div>
               </div>
             </div>
