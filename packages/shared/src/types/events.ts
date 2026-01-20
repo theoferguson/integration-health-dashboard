@@ -1,8 +1,14 @@
+/**
+ * Event Types
+ * Shared type definitions for integration events
+ */
+
 import type { IntegrationType } from './integrations.js';
 
 export type EventStatus = 'success' | 'failure' | 'pending';
 export type ErrorSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type ResolutionStatus = 'open' | 'acknowledged' | 'resolved';
+
 export type ErrorCategory =
   | 'auth'
   | 'rate_limit'
@@ -15,27 +21,17 @@ export type ErrorCategory =
 
 export interface Resolution {
   status: ResolutionStatus;
-  acknowledgedAt?: Date;
+  acknowledgedAt?: Date | string;
   acknowledgedBy?: string;
-  resolvedAt?: Date;
+  resolvedAt?: Date | string;
   resolvedBy?: string;
   notes?: string;
 }
 
-export interface IntegrationEvent {
-  id: string;
-  integration: IntegrationType;
-  eventType: string;
-  status: EventStatus;
-  timestamp: Date;
-  payload: Record<string, unknown>;
-  error?: {
-    message: string;
-    code?: string;
-    context?: Record<string, unknown>;
-  };
-  classification?: ErrorClassification;
-  resolution?: Resolution;
+export interface EventError {
+  message: string;
+  code?: string;
+  context?: Record<string, unknown>;
 }
 
 export interface ErrorClassification {
@@ -47,14 +43,29 @@ export interface ErrorClassification {
   businessImpact?: string;
 }
 
+export interface IntegrationEvent {
+  id: string;
+  integration: IntegrationType;
+  eventType: string;
+  status: EventStatus;
+  timestamp: Date | string;
+  payload: Record<string, unknown>;
+  error?: EventError;
+  classification?: ErrorClassification;
+  resolution?: Resolution;
+}
+
 export interface CreateEventInput {
   integration: IntegrationType;
   eventType: string;
   status: EventStatus;
   payload: Record<string, unknown>;
-  error?: {
-    message: string;
-    code?: string;
-    context?: Record<string, unknown>;
-  };
+  error?: EventError;
+}
+
+export interface HealthOverview {
+  totalIntegrations: number;
+  healthy: number;
+  degraded: number;
+  down: number;
 }

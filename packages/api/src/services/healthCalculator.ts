@@ -1,12 +1,14 @@
 import type { Integration, IntegrationType, IntegrationStatus } from '../types/index.js';
-import { INTEGRATIONS } from '../types/index.js';
+import { INTEGRATIONS, HEALTH_THRESHOLDS } from '../types/index.js';
 import { getEventStats } from './eventStore.js';
 
 function calculateStatus(successRate: number, errorsLast24h: number): IntegrationStatus {
-  if (successRate >= 98 && errorsLast24h < 5) {
+  const { HEALTHY, DEGRADED } = HEALTH_THRESHOLDS;
+
+  if (successRate >= HEALTHY.MIN_SUCCESS_RATE && errorsLast24h < HEALTHY.MAX_ERRORS_24H) {
     return 'healthy';
   }
-  if (successRate >= 90 || errorsLast24h < 20) {
+  if (successRate >= DEGRADED.MIN_SUCCESS_RATE || errorsLast24h < DEGRADED.MAX_ERRORS_24H) {
     return 'degraded';
   }
   return 'down';

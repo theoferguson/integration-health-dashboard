@@ -16,6 +16,13 @@ import type {
   IntegrationType,
 } from '../types/index.js';
 
+/**
+ * Helper to safely get timestamp from Date | string
+ */
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
 // In-memory storage
 let pipelines: SyncPipeline[] = [];
 let instances: SyncInstance[] = [];
@@ -175,14 +182,14 @@ export function generateMockData(options: { clientCount?: number; introduceFailu
 
       // Calculate stats from executions
       const last24hExecutions = executionHistory.filter(
-        (e) => e.startedAt.getTime() > now.getTime() - 24 * 60 * 60 * 1000
+        (e) => toDate(e.startedAt).getTime() > now.getTime() - 24 * 60 * 60 * 1000
       );
 
       const stats24h = calculateStats(last24hExecutions);
 
       // Calculate when last sync was and next sync
       const lastExec = executionHistory[0];
-      const lastSyncTime = lastExec?.completedAt || lastExec?.startedAt || now;
+      const lastSyncTime = lastExec?.completedAt ? toDate(lastExec.completedAt) : lastExec?.startedAt ? toDate(lastExec.startedAt) : now;
 
       let nextSync = new Date(lastSyncTime.getTime() + pipeline.schedule.intervalMinutes * 60 * 1000);
 
@@ -443,7 +450,7 @@ export function getExecutions(filters?: { instanceId?: string; pipelineId?: stri
   }
 
   // Sort by most recent first
-  result.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+  result.sort((a, b) => toDate(b.startedAt).getTime() - toDate(a.startedAt).getTime());
 
   if (filters?.limit) {
     result = result.slice(0, filters.limit);
@@ -467,7 +474,7 @@ export function getSystemOverview(): SyncSystemOverview {
   const staleInstances = allInstances.filter((i) => i.status === 'stale').length;
   const failingInstances = allInstances.filter((i) => i.status === 'failing').length;
 
-  const recentExecutions = executions.filter((e) => e.startedAt.getTime() > last24h);
+  const recentExecutions = executions.filter((e) => toDate(e.startedAt).getTime() > last24h);
   const successfulRecent = recentExecutions.filter((e) => e.status === 'success' || e.status === 'partial').length;
 
   // Calculate per-pipeline stats

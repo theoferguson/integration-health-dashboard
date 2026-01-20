@@ -1,11 +1,5 @@
 import type { HealthOverview } from '../types';
-
-export interface ErrorStats {
-  total: number;
-  open: number;
-  acknowledged: number;
-  resolved: number;
-}
+import type { ErrorStats } from '../hooks';
 
 interface DashboardProps {
   health: HealthOverview;

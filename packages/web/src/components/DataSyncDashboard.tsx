@@ -37,9 +37,9 @@ const statusDotColors: Record<SyncInstanceStatus, string> = {
   disabled: 'bg-gray-400',
 };
 
-function formatRelativeTime(dateString: string | null): string {
-  if (!dateString) return 'Never';
-  const date = new Date(dateString);
+function formatRelativeTime(dateValue: Date | string | null): string {
+  if (!dateValue) return 'Never';
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
