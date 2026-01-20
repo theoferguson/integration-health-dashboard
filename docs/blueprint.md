@@ -1,7 +1,5 @@
 # Blueprint: Integration Health Dashboard
 
-*A Miter-style design document for an AI-native integration monitoring system*
-
 ## Overview
 
 ### Problem Statement
@@ -124,9 +122,6 @@ Integration errors follow patterns, but the context around them varies significa
 The classifier uses a system prompt with embedded domain knowledge:
 
 ```
-You are an integration support engineer for a construction contractor
-software platform (similar to Miter).
-
 Your job is to analyze integration failures and provide actionable insights.
 The platform integrates with:
 - Procore (project management - jobs, cost codes, daily logs)
