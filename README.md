@@ -174,7 +174,7 @@ npm run simulate -- --integration procore
 Type safety across frontend, backend, and simulator. Shared types ensure consistency.
 
 ### 2. In-Memory Event Store
-For this demo, events are stored in memory. In production, this would be MongoDB or PostgreSQL with proper indexing for time-series queries.
+For this demo, events are stored in memory. In production, this would be replaced with SQLite (see roadmap below).
 
 ### 3. Prompt Engineering as Code
 The AI classifier prompt is explicit and tunable. Construction domain knowledge is embedded directly in the system prompt, making it easy to adjust for different industries.
@@ -185,18 +185,192 @@ Single repository with npm workspaces for coordinated development while maintain
 ### 5. Minimal UI
 Clarity over polish. The dashboard prioritizes information density and actionability over visual flourish.
 
-## What I'd Build Next
+---
 
-With more time, I would add:
+## Roadmap — Evolving into a General Observability Tool
 
-1. **Persistent storage** — MongoDB for events, integration configs, sync history
-2. **Alerting** — Configurable thresholds, Slack/email notifications
-3. **Retry queue** — Automatic retry with exponential backoff
-4. **Integration-specific SLAs** — Health scores based on expected sync frequency
-5. **Team assignment** — Route errors to responsible engineers
-6. **Audit log** — Track who acknowledged/resolved issues
-7. **Real webhook verification** — Stripe signature verification, OAuth token management
-8. **Sync scheduling** — Configurable sync schedules per pipeline/client
+The current dashboard is a high-quality demo with simulated data. The next phase expands it into a lightweight, self-hosted observability platform — a minimal Sentry/Datadog that any codebase can instrument against via an SDK.
+
+### Why this direction
+
+The architecture is already right. The event model, triage workflow, AI classification, and sync monitoring are all production-quality. What's missing is:
+1. Persistent storage so data survives server restarts
+2. A way for real applications to send events to the dashboard
+3. Project isolation so multiple codebases can be monitored independently
+
+### Phase 1 — Persistent storage (SQLite)
+
+**Goal:** Events survive restarts. Dashboard becomes genuinely useful, not just a demo.
+
+Replace the in-memory `EventStore` with `better-sqlite3`. SQLite is the right choice here — no separate database service, single file on disk, fast enough for thousands of events, and Fly.io supports persistent volumes natively.
+
+Schema:
+
+```sql
+CREATE TABLE projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  api_key TEXT UNIQUE NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE events (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  integration TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  timestamp INTEGER NOT NULL,
+  payload TEXT NOT NULL,      -- JSON
+  error TEXT,                 -- JSON
+  classification TEXT,        -- JSON
+  resolution TEXT,            -- JSON
+  FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+CREATE INDEX idx_events_project_time ON events(project_id, timestamp DESC);
+CREATE INDEX idx_events_status ON events(project_id, status);
+```
+
+**Changes required:**
+- Swap `EventStore` service (same interface, different backing)
+- Add `projects` table and lightweight key management endpoint
+- Mount a Fly.io persistent volume at `/data`
+- Update `fly.toml` with volume config
+
+**Effort:** ~1 day
+
+---
+
+### Phase 2 — Generic ingestion endpoint
+
+**Goal:** Accept events from any application, not just the simulated construction integrations.
+
+Add a new route `POST /api/ingest` that accepts a general-purpose event payload authenticated by API key:
+
+```ts
+// Request body
+{
+  integration: string,      // e.g. "stripe", "auth", "database", or any label
+  event_type: string,       // e.g. "payment.failed", "login.error"
+  status: "success" | "failure" | "pending",
+  payload: Record<string, unknown>,
+  error?: {
+    message: string,
+    code?: string,
+    stack?: string,
+    context?: Record<string, unknown>
+  }
+}
+
+// Auth header
+Authorization: Bearer proj_xxxxxxxxxxxx
+```
+
+The existing construction-specific webhook routes (`/api/webhooks/procore`, etc.) stay as-is and power the demo mode. The new `/api/ingest` endpoint is the generic entry point for SDK usage.
+
+**Effort:** ~half day
+
+---
+
+### Phase 3 — SDK package (`packages/sdk`)
+
+**Goal:** A small npm package developers drop into their applications to start sending events to the dashboard.
+
+```bash
+npm install @theo/ihd-sdk
+```
+
+#### Node.js / Express
+
+```ts
+import { IHDClient } from '@theo/ihd-sdk'
+
+const monitor = new IHDClient({
+  apiKey: process.env.IHD_API_KEY,
+  endpoint: 'https://integration-health-dashboard.fly.dev',
+  project: 'my-api'
+})
+
+// Auto-capture unhandled Express errors
+app.use(monitor.expressMiddleware())
+
+// Manual capture anywhere
+try {
+  await syncPayroll()
+} catch (err) {
+  monitor.capture(err, {
+    integration: 'gusto',
+    event_type: 'payroll.sync',
+    context: { clientId, payPeriod }
+  })
+}
+```
+
+#### React
+
+```tsx
+import { IHDErrorBoundary } from '@theo/ihd-sdk/react'
+
+// Wraps your app — captures unhandled React errors
+<IHDErrorBoundary client={monitor}>
+  <App />
+</IHDErrorBoundary>
+```
+
+#### SDK internals
+
+- Batches events and flushes every 2s (or immediately on error)
+- Fire-and-forget by default — never blocks the calling process
+- Retries failed sends up to 3 times with exponential backoff
+- TypeScript-native with full type exports
+- Zero required dependencies (uses `fetch`, available in Node 18+)
+
+**Effort:** ~1–2 days
+
+---
+
+### Phase 4 — Dashboard UI adjustments
+
+**Goal:** Surface project-level data and make the dashboard useful for generic apps, not just the construction demo.
+
+- **Project switcher** — dropdown to switch between monitored projects
+- **Generic integration labels** — "auth", "database", "payments" alongside existing construction labels
+- **Demo mode toggle** — button to seed the existing construction scenarios for showcase purposes
+- **API key management page** — create/revoke keys, view project usage
+
+**Effort:** ~half day
+
+---
+
+### Total scope
+
+| Phase | Description | Effort |
+|-------|-------------|--------|
+| 1 | SQLite persistence + Fly volume | ~1 day |
+| 2 | Generic `/api/ingest` endpoint | ~half day |
+| 3 | SDK package (Node + React) | ~1–2 days |
+| 4 | Dashboard UI adjustments | ~half day |
+| **Total** | | **~3–4 days** |
+
+---
+
+### What this enables
+
+Once complete, any project can be instrumented in under 5 minutes:
+
+```bash
+npm install @theo/ihd-sdk
+```
+
+```ts
+const monitor = new IHDClient({ apiKey: 'proj_xxx', endpoint: '...' })
+app.use(monitor.expressMiddleware())
+```
+
+Events flow into the dashboard, get AI-classified on demand, and can be triaged, acknowledged, and resolved by the team. The construction demo remains as a showcase of domain-specific capability.
+
+---
 
 ## Deployment
 
@@ -223,6 +397,8 @@ fly deploy
 | `OPENAI_API_KEY` | OpenAI API key for AI classification | No (mock fallback) |
 | `PORT` | Server port | No (defaults to 3001 locally, 8080 in prod) |
 
+---
+
 ## About
 
 Built by **Theo Ferguson** as a portfolio project demonstrating:
@@ -233,5 +409,3 @@ Built by **Theo Ferguson** as a portfolio project demonstrating:
 - **Production thinking** — Error handling, graceful degradation, observability
 
 ---
-
-*This project was built to demonstrate how I approach software development: lean, opinionated, and focused on real problems.*
