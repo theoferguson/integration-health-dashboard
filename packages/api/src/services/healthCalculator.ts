@@ -1,6 +1,6 @@
-import type { Integration, IntegrationType, IntegrationStatus } from '../types/index.js';
-import { INTEGRATIONS, HEALTH_THRESHOLDS } from '../types/index.js';
-import { getEventStats } from './eventStore.js';
+import type { Integration, IntegrationStatus } from '../types/index.js';
+import { HEALTH_THRESHOLDS } from '../types/index.js';
+import { getEventStats, getDistinctIntegrations } from './eventStore.js';
 
 function calculateStatus(successRate: number, errorsLast24h: number): IntegrationStatus {
   const { HEALTHY, DEGRADED } = HEALTH_THRESHOLDS;
@@ -14,12 +14,11 @@ function calculateStatus(successRate: number, errorsLast24h: number): Integratio
   return 'down';
 }
 
-export function getIntegrationHealth(integrationId: IntegrationType): Integration {
-  const base = INTEGRATIONS[integrationId];
+export function getIntegrationHealth(integrationId: string): Integration {
   const stats = getEventStats(integrationId);
 
   return {
-    ...base,
+    id: integrationId,
     status: calculateStatus(stats.successRate, stats.errorsLast24h),
     lastSync: stats.lastSync,
     successRate: stats.successRate,
@@ -28,10 +27,12 @@ export function getIntegrationHealth(integrationId: IntegrationType): Integratio
   };
 }
 
+/**
+ * Integrations are discovered dynamically from reported events -
+ * there is no static registry of "known" integrations.
+ */
 export function getAllIntegrationHealth(): Integration[] {
-  return Object.keys(INTEGRATIONS).map((id) =>
-    getIntegrationHealth(id as IntegrationType)
-  );
+  return getDistinctIntegrations().map((id) => getIntegrationHealth(id));
 }
 
 export function getOverallHealth(): {

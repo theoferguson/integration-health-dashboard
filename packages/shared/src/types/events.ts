@@ -3,8 +3,6 @@
  * Shared type definitions for integration events
  */
 
-import type { IntegrationType } from './integrations.js';
-
 export type EventStatus = 'success' | 'failure' | 'pending';
 export type ErrorSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type ResolutionStatus = 'open' | 'acknowledged' | 'resolved';
@@ -45,7 +43,7 @@ export interface ErrorClassification {
 
 export interface IntegrationEvent {
   id: string;
-  integration: IntegrationType;
+  integration: string;
   eventType: string;
   status: EventStatus;
   timestamp: Date | string;
@@ -56,7 +54,7 @@ export interface IntegrationEvent {
 }
 
 export interface CreateEventInput {
-  integration: IntegrationType;
+  integration: string;
   eventType: string;
   status: EventStatus;
   payload: Record<string, unknown>;

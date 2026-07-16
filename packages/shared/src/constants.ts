@@ -7,7 +7,6 @@
  * Event Store Configuration
  */
 export const EVENT_STORE = {
-  MAX_EVENTS_IN_MEMORY: 1000,
   DEFAULT_PAGE_SIZE: 50,
   MAX_PAGE_SIZE: 100,
   MAX_EXPORT_LIMIT: 10000,
@@ -39,14 +38,6 @@ export const TIMING = {
 /**
  * UI Display Labels
  */
-export const INTEGRATION_LABELS: Record<string, string> = {
-  procore: 'Procore',
-  gusto: 'Gusto',
-  quickbooks: 'QuickBooks',
-  stripe_issuing: 'Stripe Issuing',
-  certified_payroll: 'Certified Payroll',
-} as const;
-
 export const CATEGORY_LABELS: Record<string, string> = {
   auth: 'Authentication',
   rate_limit: 'Rate Limit',
@@ -93,13 +84,6 @@ export const RESOLUTION_STATUS_COLORS: Record<string, string> = {
   resolved: 'bg-green-100 text-green-800',
 } as const;
 
-export const SYNC_STATUS_COLORS: Record<string, string> = {
-  healthy: 'bg-green-100 text-green-700',
-  stale: 'bg-yellow-100 text-yellow-700',
-  failing: 'bg-red-100 text-red-700',
-  disabled: 'bg-gray-100 text-gray-700',
-} as const;
-
 /**
  * API Configuration
  */
@@ -111,10 +95,5 @@ export const API = {
     EVENTS_PAGINATED: '/events/paginated',
     INTEGRATIONS: '/integrations',
     INTEGRATIONS_HEALTH: '/integrations/health',
-    SYNC_OVERVIEW: '/sync/overview',
-    SYNC_PIPELINES: '/sync/pipelines',
-    SYNC_INSTANCES: '/sync/instances',
-    SYNC_CLIENTS: '/sync/clients',
-    SIMULATE: '/simulate',
   },
 } as const;

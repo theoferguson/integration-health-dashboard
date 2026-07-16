@@ -5,7 +5,6 @@ import {
   getOverallHealth,
 } from '../healthCalculator.js';
 import { createEvent, clearEvents } from '../eventStore.js';
-import type { IntegrationType } from '../../types/index.js';
 
 describe('healthCalculator', () => {
   beforeEach(() => {
@@ -15,7 +14,7 @@ describe('healthCalculator', () => {
 
   describe('getIntegrationHealth', () => {
     it('should return healthy status when no events exist', () => {
-      const health = getIntegrationHealth('procore');
+      const health = getIntegrationHealth('weather');
 
       expect(health.status).toBe('healthy');
       expect(health.successRate).toBe(100);
@@ -27,7 +26,7 @@ describe('healthCalculator', () => {
       // Create 98 successful events and 2 failures (98% success)
       for (let i = 0; i < 98; i++) {
         createEvent({
-          integration: 'procore',
+          integration: 'weather',
           eventType: 'test.event',
           status: 'success',
           payload: {},
@@ -35,7 +34,7 @@ describe('healthCalculator', () => {
       }
       for (let i = 0; i < 2; i++) {
         createEvent({
-          integration: 'procore',
+          integration: 'weather',
           eventType: 'test.event',
           status: 'failure',
           payload: {},
@@ -43,7 +42,7 @@ describe('healthCalculator', () => {
         });
       }
 
-      const health = getIntegrationHealth('procore');
+      const health = getIntegrationHealth('weather');
 
       expect(health.status).toBe('healthy');
       expect(health.successRate).toBe(98);
@@ -55,7 +54,7 @@ describe('healthCalculator', () => {
       // Create 90 successful events and 10 failures (90% success)
       for (let i = 0; i < 90; i++) {
         createEvent({
-          integration: 'gusto',
+          integration: 'nyt-news',
           eventType: 'test.event',
           status: 'success',
           payload: {},
@@ -63,7 +62,7 @@ describe('healthCalculator', () => {
       }
       for (let i = 0; i < 10; i++) {
         createEvent({
-          integration: 'gusto',
+          integration: 'nyt-news',
           eventType: 'test.event',
           status: 'failure',
           payload: {},
@@ -71,7 +70,7 @@ describe('healthCalculator', () => {
         });
       }
 
-      const health = getIntegrationHealth('gusto');
+      const health = getIntegrationHealth('nyt-news');
 
       expect(health.status).toBe('degraded');
       expect(health.successRate).toBe(90);
@@ -81,7 +80,7 @@ describe('healthCalculator', () => {
       // Create 80 successful events and 20 failures (80% success)
       for (let i = 0; i < 80; i++) {
         createEvent({
-          integration: 'quickbooks',
+          integration: 'nyc-civic-finance',
           eventType: 'test.event',
           status: 'success',
           payload: {},
@@ -89,7 +88,7 @@ describe('healthCalculator', () => {
       }
       for (let i = 0; i < 20; i++) {
         createEvent({
-          integration: 'quickbooks',
+          integration: 'nyc-civic-finance',
           eventType: 'test.event',
           status: 'failure',
           payload: {},
@@ -97,29 +96,27 @@ describe('healthCalculator', () => {
         });
       }
 
-      const health = getIntegrationHealth('quickbooks');
+      const health = getIntegrationHealth('nyc-civic-finance');
 
       expect(health.status).toBe('down');
       expect(health.successRate).toBe(80);
     });
 
-    it('should include integration metadata', () => {
-      const health = getIntegrationHealth('procore');
+    it('should use the requested id even if no events exist for it', () => {
+      const health = getIntegrationHealth('some-new-integration');
 
-      expect(health.id).toBe('procore');
-      expect(health.name).toBe('Procore');
-      expect(health.description).toContain('Project management');
+      expect(health.id).toBe('some-new-integration');
     });
 
     it('should track last sync time', () => {
       createEvent({
-        integration: 'stripe_issuing',
-        eventType: 'card.created',
+        integration: 'weather',
+        eventType: 'forecast.sync',
         status: 'success',
         payload: {},
       });
 
-      const health = getIntegrationHealth('stripe_issuing');
+      const health = getIntegrationHealth('weather');
 
       expect(health.lastSync).not.toBeNull();
       expect(health.lastSync).toBeInstanceOf(Date);
@@ -127,24 +124,27 @@ describe('healthCalculator', () => {
   });
 
   describe('getAllIntegrationHealth', () => {
-    it('should return health for all 5 integrations', () => {
+    it('should return an empty array when no integrations have reported events', () => {
+      expect(getAllIntegrationHealth()).toEqual([]);
+    });
+
+    it('should discover integrations dynamically from reported events', () => {
+      createEvent({ integration: 'weather', eventType: 'a', status: 'success', payload: {} });
+      createEvent({ integration: 'nyt-news', eventType: 'b', status: 'success', payload: {} });
+
       const allHealth = getAllIntegrationHealth();
-
-      expect(allHealth).toHaveLength(5);
-
       const integrationIds = allHealth.map((h) => h.id);
-      expect(integrationIds).toContain('procore');
-      expect(integrationIds).toContain('gusto');
-      expect(integrationIds).toContain('quickbooks');
-      expect(integrationIds).toContain('stripe_issuing');
-      expect(integrationIds).toContain('certified_payroll');
+
+      expect(integrationIds.sort()).toEqual(['nyt-news', 'weather']);
     });
 
     it('should calculate health independently per integration', () => {
-      // Add failures only to gusto
+      createEvent({ integration: 'weather', eventType: 'a', status: 'success', payload: {} });
+
+      // Add failures only to nyt-news
       for (let i = 0; i < 50; i++) {
         createEvent({
-          integration: 'gusto',
+          integration: 'nyt-news',
           eventType: 'test.event',
           status: 'failure',
           payload: {},
@@ -153,29 +153,31 @@ describe('healthCalculator', () => {
       }
 
       const allHealth = getAllIntegrationHealth();
-      const gustoHealth = allHealth.find((h) => h.id === 'gusto');
-      const procoreHealth = allHealth.find((h) => h.id === 'procore');
+      const newsHealth = allHealth.find((h) => h.id === 'nyt-news');
+      const weatherHealth = allHealth.find((h) => h.id === 'weather');
 
-      expect(gustoHealth?.status).toBe('down');
-      expect(procoreHealth?.status).toBe('healthy');
+      expect(newsHealth?.status).toBe('down');
+      expect(weatherHealth?.status).toBe('healthy');
     });
   });
 
   describe('getOverallHealth', () => {
-    it('should return correct counts when all healthy', () => {
+    it('should return zero counts when no integrations have reported events', () => {
       const overall = getOverallHealth();
 
-      expect(overall.totalIntegrations).toBe(5);
-      expect(overall.healthy).toBe(5);
+      expect(overall.totalIntegrations).toBe(0);
+      expect(overall.healthy).toBe(0);
       expect(overall.degraded).toBe(0);
       expect(overall.down).toBe(0);
     });
 
     it('should count degraded and down integrations', () => {
-      // Make gusto degraded (90% success rate)
+      createEvent({ integration: 'weather', eventType: 'a', status: 'success', payload: {} });
+
+      // Make nyt-news degraded (90% success rate)
       for (let i = 0; i < 90; i++) {
         createEvent({
-          integration: 'gusto',
+          integration: 'nyt-news',
           eventType: 'test.event',
           status: 'success',
           payload: {},
@@ -183,7 +185,7 @@ describe('healthCalculator', () => {
       }
       for (let i = 0; i < 10; i++) {
         createEvent({
-          integration: 'gusto',
+          integration: 'nyt-news',
           eventType: 'test.event',
           status: 'failure',
           payload: {},
@@ -191,10 +193,10 @@ describe('healthCalculator', () => {
         });
       }
 
-      // Make quickbooks down (50% success rate)
+      // Make nyc-civic-finance down (50% success rate)
       for (let i = 0; i < 50; i++) {
         createEvent({
-          integration: 'quickbooks',
+          integration: 'nyc-civic-finance',
           eventType: 'test.event',
           status: 'success',
           payload: {},
@@ -202,7 +204,7 @@ describe('healthCalculator', () => {
       }
       for (let i = 0; i < 50; i++) {
         createEvent({
-          integration: 'quickbooks',
+          integration: 'nyc-civic-finance',
           eventType: 'test.event',
           status: 'failure',
           payload: {},
@@ -212,8 +214,8 @@ describe('healthCalculator', () => {
 
       const overall = getOverallHealth();
 
-      expect(overall.totalIntegrations).toBe(5);
-      expect(overall.healthy).toBe(3);
+      expect(overall.totalIntegrations).toBe(3);
+      expect(overall.healthy).toBe(1);
       expect(overall.degraded).toBe(1);
       expect(overall.down).toBe(1);
     });

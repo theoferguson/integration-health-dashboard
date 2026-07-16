@@ -5,6 +5,7 @@ import {
   getEventById,
   updateEventClassification,
   getEventStats,
+  getDistinctIntegrations,
   clearEvents,
 } from '../eventStore.js';
 import type { CreateEventInput } from '../../types/index.js';
@@ -17,10 +18,10 @@ describe('eventStore', () => {
   describe('createEvent', () => {
     it('should create an event with generated id and timestamp', () => {
       const input: CreateEventInput = {
-        integration: 'procore',
-        eventType: 'project.sync',
+        integration: 'weather',
+        eventType: 'forecast.sync',
         status: 'success',
-        payload: { project_id: 123 },
+        payload: { zone: 'NYZ072' },
       };
 
       const event = createEvent(input);
@@ -28,44 +29,44 @@ describe('eventStore', () => {
       expect(event.id).toBeDefined();
       expect(event.id).toHaveLength(36); // UUID format
       expect(event.timestamp).toBeInstanceOf(Date);
-      expect(event.integration).toBe('procore');
-      expect(event.eventType).toBe('project.sync');
+      expect(event.integration).toBe('weather');
+      expect(event.eventType).toBe('forecast.sync');
       expect(event.status).toBe('success');
-      expect(event.payload).toEqual({ project_id: 123 });
+      expect(event.payload).toEqual({ zone: 'NYZ072' });
     });
 
     it('should include error details for failure events', () => {
       const input: CreateEventInput = {
-        integration: 'gusto',
-        eventType: 'employee.sync',
+        integration: 'nyt-news',
+        eventType: 'top-stories.sync',
         status: 'failure',
         payload: {},
         error: {
-          message: 'Validation failed',
-          code: '400',
-          context: { field: 'email' },
+          message: 'Rate limit exceeded',
+          code: '429',
+          context: { limit: '5/min' },
         },
       };
 
       const event = createEvent(input);
 
       expect(event.error).toBeDefined();
-      expect(event.error?.message).toBe('Validation failed');
-      expect(event.error?.code).toBe('400');
-      expect(event.error?.context).toEqual({ field: 'email' });
+      expect(event.error?.message).toBe('Rate limit exceeded');
+      expect(event.error?.code).toBe('429');
+      expect(event.error?.context).toEqual({ limit: '5/min' });
     });
   });
 
   describe('getEvents', () => {
     it('should return events in reverse chronological order', () => {
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'first',
         status: 'success',
         payload: {},
       });
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'second',
         status: 'success',
         payload: {},
@@ -79,36 +80,36 @@ describe('eventStore', () => {
 
     it('should filter by integration', () => {
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'success',
         payload: {},
       });
       createEvent({
-        integration: 'gusto',
+        integration: 'nyt-news',
         eventType: 'test',
         status: 'success',
         payload: {},
       });
 
-      const procoreEvents = getEvents({ integration: 'procore' });
-      const gustoEvents = getEvents({ integration: 'gusto' });
+      const weatherEvents = getEvents({ integration: 'weather' });
+      const newsEvents = getEvents({ integration: 'nyt-news' });
 
-      expect(procoreEvents).toHaveLength(1);
-      expect(procoreEvents[0].integration).toBe('procore');
-      expect(gustoEvents).toHaveLength(1);
-      expect(gustoEvents[0].integration).toBe('gusto');
+      expect(weatherEvents).toHaveLength(1);
+      expect(weatherEvents[0].integration).toBe('weather');
+      expect(newsEvents).toHaveLength(1);
+      expect(newsEvents[0].integration).toBe('nyt-news');
     });
 
     it('should filter by status', () => {
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'success',
         payload: {},
       });
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'failure',
         payload: {},
@@ -125,7 +126,7 @@ describe('eventStore', () => {
     it('should respect limit parameter', () => {
       for (let i = 0; i < 10; i++) {
         createEvent({
-          integration: 'procore',
+          integration: 'weather',
           eventType: `event-${i}`,
           status: 'success',
           payload: {},
@@ -139,20 +140,20 @@ describe('eventStore', () => {
 
     it('should combine multiple filters', () => {
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'success',
         payload: {},
       });
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'failure',
         payload: {},
         error: { message: 'Error' },
       });
       createEvent({
-        integration: 'gusto',
+        integration: 'nyt-news',
         eventType: 'test',
         status: 'failure',
         payload: {},
@@ -160,12 +161,12 @@ describe('eventStore', () => {
       });
 
       const events = getEvents({
-        integration: 'procore',
+        integration: 'weather',
         status: 'failure',
       });
 
       expect(events).toHaveLength(1);
-      expect(events[0].integration).toBe('procore');
+      expect(events[0].integration).toBe('weather');
       expect(events[0].status).toBe('failure');
     });
   });
@@ -173,7 +174,7 @@ describe('eventStore', () => {
   describe('getEventById', () => {
     it('should return event by id', () => {
       const created = createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'success',
         payload: {},
@@ -195,7 +196,7 @@ describe('eventStore', () => {
   describe('updateEventClassification', () => {
     it('should add classification to event', () => {
       const event = createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'failure',
         payload: {},
@@ -237,7 +238,7 @@ describe('eventStore', () => {
       // Create 8 success, 2 failure events
       for (let i = 0; i < 8; i++) {
         createEvent({
-          integration: 'procore',
+          integration: 'weather',
           eventType: 'test',
           status: 'success',
           payload: {},
@@ -245,7 +246,7 @@ describe('eventStore', () => {
       }
       for (let i = 0; i < 2; i++) {
         createEvent({
-          integration: 'procore',
+          integration: 'weather',
           eventType: 'test',
           status: 'failure',
           payload: {},
@@ -253,7 +254,7 @@ describe('eventStore', () => {
         });
       }
 
-      const stats = getEventStats('procore');
+      const stats = getEventStats('weather');
 
       expect(stats.eventsLast24h).toBe(10);
       expect(stats.errorsLast24h).toBe(2);
@@ -262,7 +263,7 @@ describe('eventStore', () => {
     });
 
     it('should return 100% success rate with no events', () => {
-      const stats = getEventStats('procore');
+      const stats = getEventStats('weather');
 
       expect(stats.successRate).toBe(100);
       expect(stats.eventsLast24h).toBe(0);
@@ -272,39 +273,53 @@ describe('eventStore', () => {
 
     it('should only count events for specified integration', () => {
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'success',
         payload: {},
       });
       createEvent({
-        integration: 'gusto',
+        integration: 'nyt-news',
         eventType: 'test',
         status: 'failure',
         payload: {},
         error: { message: 'Error' },
       });
 
-      const procoreStats = getEventStats('procore');
-      const gustoStats = getEventStats('gusto');
+      const weatherStats = getEventStats('weather');
+      const newsStats = getEventStats('nyt-news');
 
-      expect(procoreStats.eventsLast24h).toBe(1);
-      expect(procoreStats.successRate).toBe(100);
-      expect(gustoStats.eventsLast24h).toBe(1);
-      expect(gustoStats.successRate).toBe(0);
+      expect(weatherStats.eventsLast24h).toBe(1);
+      expect(weatherStats.successRate).toBe(100);
+      expect(newsStats.eventsLast24h).toBe(1);
+      expect(newsStats.successRate).toBe(0);
+    });
+  });
+
+  describe('getDistinctIntegrations', () => {
+    it('should return unique integration ids seen in events', () => {
+      createEvent({ integration: 'weather', eventType: 'a', status: 'success', payload: {} });
+      createEvent({ integration: 'weather', eventType: 'b', status: 'success', payload: {} });
+      createEvent({ integration: 'nyt-news', eventType: 'c', status: 'success', payload: {} });
+
+      expect(getDistinctIntegrations().sort()).toEqual(['nyt-news', 'weather']);
+    });
+
+    it('should return an empty array with no events', () => {
+      expect(getDistinctIntegrations()).toEqual([]);
     });
   });
 
   describe('clearEvents', () => {
     it('should remove all events', () => {
       createEvent({
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test',
         status: 'success',
         payload: {},
       });
       createEvent({
-        integration: 'gusto',
+        integration: 'nyt-news',
         eventType: 'test',
         status: 'success',
         payload: {},

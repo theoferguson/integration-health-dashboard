@@ -1,23 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { IntegrationEvent, IntegrationType, ResolutionStatus } from '../types';
+import type { IntegrationEvent, ResolutionStatus } from '../types';
 import { fetchEventsPaginated } from '../api/client';
 import type { SortField, SortOrder } from '../api/client';
-
-const integrationLabels: Record<string, string> = {
-  procore: 'Procore',
-  gusto: 'Gusto',
-  quickbooks: 'QuickBooks',
-  stripe_issuing: 'Stripe Issuing',
-  certified_payroll: 'Certified Payroll',
-};
-
-const integrationOptions: IntegrationType[] = [
-  'procore',
-  'gusto',
-  'quickbooks',
-  'stripe_issuing',
-  'certified_payroll',
-];
 
 const statusColors: Record<string, string> = {
   success: 'bg-green-100 text-green-700',
@@ -53,7 +37,6 @@ export function EventsView({ onEventClick }: EventsViewProps) {
   const [pageSize, setPageSize] = useState(25);
 
   // Filters
-  const [integrationFilter, setIntegrationFilter] = useState<IntegrationType | ''>('');
   const [statusFilter, setStatusFilter] = useState<'success' | 'failure' | ''>('');
   const [resolutionFilter, setResolutionFilter] = useState<ResolutionStatus | ''>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,7 +59,6 @@ export function EventsView({ onEventClick }: EventsViewProps) {
     setIsLoading(true);
     try {
       const result = await fetchEventsPaginated({
-        integration: integrationFilter || undefined,
         status: statusFilter || undefined,
         resolutionStatus: resolutionFilter || undefined,
         limit: pageSize,
@@ -93,7 +75,7 @@ export function EventsView({ onEventClick }: EventsViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [integrationFilter, statusFilter, resolutionFilter, pageSize, page, sortBy, sortOrder, debouncedSearch]);
+  }, [statusFilter, resolutionFilter, pageSize, page, sortBy, sortOrder, debouncedSearch]);
 
   useEffect(() => {
     loadEvents();
@@ -112,7 +94,6 @@ export function EventsView({ onEventClick }: EventsViewProps) {
   const handleExportCSV = () => {
     // Fetch all events with current filters for export
     fetchEventsPaginated({
-      integration: integrationFilter || undefined,
       status: statusFilter || undefined,
       resolutionStatus: resolutionFilter || undefined,
       limit: 10000, // Get all events
@@ -153,18 +134,6 @@ export function EventsView({ onEventClick }: EventsViewProps) {
 
           {/* Filter row on mobile */}
           <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-4">
-            {/* Integration filter */}
-            <select
-              value={integrationFilter}
-              onChange={(e) => { setIntegrationFilter(e.target.value as IntegrationType | ''); setPage(0); }}
-              className="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm bg-white"
-            >
-              <option value="">All Integrations</option>
-              {integrationOptions.map((int) => (
-                <option key={int} value={int}>{integrationLabels[int]}</option>
-              ))}
-            </select>
-
             {/* Status filter */}
             <select
               value={statusFilter}
@@ -216,10 +185,9 @@ export function EventsView({ onEventClick }: EventsViewProps) {
         {/* Results count */}
         <div className="mt-3 text-xs sm:text-sm text-gray-500">
           Showing {events.length} of {total} events
-          {(integrationFilter || statusFilter || resolutionFilter || debouncedSearch) && (
+          {(statusFilter || resolutionFilter || debouncedSearch) && (
             <button
               onClick={() => {
-                setIntegrationFilter('');
                 setStatusFilter('');
                 setResolutionFilter('');
                 setSearchQuery('');
@@ -298,7 +266,7 @@ export function EventsView({ onEventClick }: EventsViewProps) {
                       {new Date(event.timestamp).toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {integrationLabels[event.integration] || event.integration}
+                      {event.integration}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {event.eventType}

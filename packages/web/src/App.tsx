@@ -4,18 +4,11 @@
  */
 
 import { useState, useCallback } from 'react';
-import {
-  Dashboard,
-  IntegrationCard,
-  EventStream,
-  EventsView,
-  ErrorTriage,
-  DataSyncDashboard,
-} from './components';
-import { useHealthData, useSyncData, useSimulation } from './hooks';
+import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage } from './components';
+import { useHealthData } from './hooks';
 import type { IntegrationEvent } from './types';
 
-type TabType = 'integrations' | 'events' | 'sync';
+type TabType = 'integrations' | 'events';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('integrations');
@@ -29,50 +22,16 @@ function App() {
     events,
     errorStats,
     isLoading,
-    error: healthError,
+    error,
     refresh: refreshHealth,
     updateEvent,
   } = useHealthData({ filter });
-
-  const {
-    syncOverview,
-    refresh: refreshSync,
-    refreshKey: syncRefreshKey,
-    incrementRefreshKey: incrementSyncRefreshKey,
-  } = useSyncData(activeTab === 'sync');
-
-  const { isSimulating, error: simError, runSimulation } = useSimulation();
-
-  const error = healthError || simError;
 
   // Handle event updates from triage modal
   const handleEventUpdated = useCallback((updatedEvent: IntegrationEvent) => {
     updateEvent(updatedEvent);
     setSelectedEvent(updatedEvent);
   }, [updateEvent]);
-
-  // Handle simulation with refresh callbacks
-  const handleRunSimulation = useCallback(async () => {
-    await runSimulation({
-      onComplete: refreshHealth,
-      onSyncComplete: async () => {
-        if (activeTab === 'sync') {
-          await refreshSync();
-          incrementSyncRefreshKey();
-        }
-      },
-    });
-  }, [runSimulation, refreshHealth, refreshSync, incrementSyncRefreshKey, activeTab]);
-
-  // Handle refresh button click
-  const handleRefresh = useCallback(() => {
-    if (activeTab === 'integrations') {
-      refreshHealth();
-    } else {
-      refreshSync();
-      incrementSyncRefreshKey();
-    }
-  }, [activeTab, refreshHealth, refreshSync, incrementSyncRefreshKey]);
 
   if (isLoading) {
     return (
@@ -96,19 +55,12 @@ function App() {
                 Integration Health Dashboard
               </h1>
               <p className="text-xs sm:text-sm text-gray-500">
-                Monitor integrations and track data sync status
+                Monitor integration health across any project reporting in
               </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
               <button
-                onClick={handleRunSimulation}
-                disabled={isSimulating}
-                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSimulating ? 'Simulating...' : 'Run Demo'}
-              </button>
-              <button
-                onClick={handleRefresh}
+                onClick={() => refreshHealth()}
                 className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Refresh
@@ -131,19 +83,6 @@ function App() {
               onClick={() => setActiveTab('integrations')}
             >
               Integrations
-            </TabButton>
-            <TabButton
-              active={activeTab === 'sync'}
-              onClick={() => setActiveTab('sync')}
-              badge={syncOverview && (syncOverview.failingInstances > 0 || syncOverview.staleInstances > 0)
-                ? {
-                    count: syncOverview.failingInstances + syncOverview.staleInstances,
-                    variant: syncOverview.failingInstances > 0 ? 'error' : 'warning',
-                  }
-                : undefined
-              }
-            >
-              Data Sync
             </TabButton>
             <TabButton
               active={activeTab === 'events'}
@@ -178,11 +117,17 @@ function App() {
             {/* Integrations Grid */}
             <section className="mb-8">
               <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Integrations</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {integrations.map((integration) => (
-                  <IntegrationCard key={integration.id} integration={integration} />
-                ))}
-              </div>
+              {integrations.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-gray-200">
+                  No integrations have reported in yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {integrations.map((integration) => (
+                    <IntegrationCard key={integration.id} integration={integration} />
+                  ))}
+                </div>
+              )}
             </section>
 
             {/* Event Stream */}
@@ -216,13 +161,6 @@ function App() {
         {activeTab === 'events' && (
           <EventsView onEventClick={setSelectedEvent} />
         )}
-
-        {activeTab === 'sync' && (
-          <DataSyncDashboard
-            key={syncRefreshKey}
-            onRefresh={refreshSync}
-          />
-        )}
       </main>
 
       {/* Error Triage Modal */}
@@ -241,8 +179,7 @@ function App() {
             Built by Theo Ferguson · AI-native integration monitoring
           </p>
           <p className="mt-1 hidden sm:block">
-            Demonstrating full-stack TypeScript, AI-assisted error classification, data sync
-            monitoring, and domain-aware design
+            Demonstrating full-stack TypeScript and AI-assisted error classification
           </p>
         </div>
       </footer>
@@ -256,10 +193,9 @@ interface TabButtonProps {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
-  badge?: { count: number; variant: 'error' | 'warning' };
 }
 
-function TabButton({ active, onClick, children, badge }: TabButtonProps) {
+function TabButton({ active, onClick, children }: TabButtonProps) {
   return (
     <button
       onClick={onClick}
@@ -270,17 +206,6 @@ function TabButton({ active, onClick, children, badge }: TabButtonProps) {
       }`}
     >
       {children}
-      {badge && (
-        <span
-          className={`ml-1 sm:ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-            badge.variant === 'error'
-              ? 'bg-red-100 text-red-600'
-              : 'bg-yellow-100 text-yellow-600'
-          }`}
-        >
-          {badge.count}
-        </span>
-      )}
     </button>
   );
 }

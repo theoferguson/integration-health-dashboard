@@ -5,21 +5,13 @@ interface EventStreamProps {
   onEventClick: (event: IntegrationEvent) => void;
 }
 
-const integrationLabels: Record<string, string> = {
-  procore: 'Procore',
-  gusto: 'Gusto',
-  quickbooks: 'QuickBooks',
-  stripe_issuing: 'Stripe',
-  certified_payroll: 'Cert Payroll',
-};
-
 export function EventStream({ events, onEventClick }: EventStreamProps) {
   if (events.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
         <p>No events yet.</p>
         <p className="text-sm mt-2">
-          Run the simulator to generate integration events.
+          Events appear here once a monitored integration reports in.
         </p>
       </div>
     );
@@ -45,7 +37,7 @@ export function EventStream({ events, onEventClick }: EventStreamProps) {
                 }`}
               />
               <span className="font-medium text-xs sm:text-sm">
-                {integrationLabels[event.integration] || event.integration}
+                {event.integration}
               </span>
               <span className="text-gray-400 hidden sm:inline">·</span>
               <span className="text-xs sm:text-sm text-gray-600">{event.eventType}</span>

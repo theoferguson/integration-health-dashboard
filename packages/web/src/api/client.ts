@@ -8,12 +8,6 @@ import type {
   IntegrationEvent,
   HealthOverview,
   ResolutionStatus,
-  SyncSystemOverview,
-  SyncPipeline,
-  SyncInstance,
-  SyncExecution,
-  SyncClient,
-  SyncInstanceStatus,
 } from '../types';
 import { API, TIMING } from '../types';
 
@@ -204,93 +198,5 @@ export async function reopenEvent(
 ): Promise<{ event: IntegrationEvent }> {
   return apiCall(`${API_BASE}/events/${eventId}/reopen`, {
     method: 'POST',
-  });
-}
-
-// ============ Simulation APIs ============
-
-export async function runSimulation(mode: 'demo' | 'all' = 'demo'): Promise<void> {
-  await apiCall(buildUrl('/simulate', { mode }), { method: 'POST' });
-}
-
-// ============ Sync APIs ============
-
-export async function fetchSyncOverview(): Promise<{ overview: SyncSystemOverview }> {
-  return apiCall(buildUrl('/sync/overview'));
-}
-
-export async function fetchSyncPipelines(): Promise<{ pipelines: SyncPipeline[] }> {
-  return apiCall(buildUrl('/sync/pipelines'));
-}
-
-export async function fetchSyncClients(): Promise<{ clients: SyncClient[] }> {
-  return apiCall(buildUrl('/sync/clients'));
-}
-
-export interface FetchSyncInstancesOptions {
-  clientId?: string;
-  pipelineId?: string;
-  status?: SyncInstanceStatus;
-}
-
-export async function fetchSyncInstances(
-  options?: FetchSyncInstancesOptions
-): Promise<{ instances: SyncInstance[] }> {
-  return apiCall(
-    buildUrl('/sync/instances', {
-      client_id: options?.clientId,
-      pipeline_id: options?.pipelineId,
-      status: options?.status,
-    })
-  );
-}
-
-export async function fetchSyncInstance(
-  instanceId: string
-): Promise<{ instance: SyncInstance }> {
-  return apiCall(`${API_BASE}/sync/instances/${instanceId}`);
-}
-
-export async function fetchInstanceExecutions(
-  instanceId: string,
-  limit = 20
-): Promise<{ executions: SyncExecution[] }> {
-  return apiCall(
-    buildUrl(`/sync/instances/${instanceId}/executions`, { limit })
-  );
-}
-
-export async function fetchSyncExecution(
-  executionId: string
-): Promise<{ execution: SyncExecution }> {
-  return apiCall(`${API_BASE}/sync/executions/${executionId}`);
-}
-
-export async function triggerManualSync(
-  instanceId: string
-): Promise<{ execution: SyncExecution }> {
-  return apiCall(`${API_BASE}/sync/instances/${instanceId}/sync`, {
-    method: 'POST',
-  });
-}
-
-export interface GenerateSyncDataResult {
-  success: boolean;
-  overview: {
-    activeClients: number;
-    totalPipelines: number;
-    totalInstances: number;
-    failingInstances: number;
-  };
-}
-
-export async function generateSyncData(
-  clientCount = 5,
-  introduceFailures = true
-): Promise<GenerateSyncDataResult> {
-  return apiCall(`${API_BASE}/sync/simulate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientCount, introduceFailures }),
   });
 }

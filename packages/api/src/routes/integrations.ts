@@ -5,7 +5,6 @@ import {
   getOverallHealth,
 } from '../services/healthCalculator.js';
 import { getEvents } from '../services/eventStore.js';
-import type { IntegrationType } from '../types/index.js';
 
 const router = Router();
 
@@ -25,7 +24,7 @@ router.get('/', (req, res) => {
 
 // Get a single integration's health and recent events
 router.get('/:id', (req, res) => {
-  const integrationId = req.params.id as IntegrationType;
+  const integrationId = req.params.id;
 
   try {
     const integration = getIntegrationHealth(integrationId);

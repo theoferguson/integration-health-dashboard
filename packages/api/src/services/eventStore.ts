@@ -1,30 +1,23 @@
 /**
  * Event Store
- * Manages in-memory storage for integration events
- * Refactored to class pattern for better testability
+ * SQLite-backed storage for integration events
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { db } from '../db/connection.js';
 import {
   EVENT_STORE,
   type IntegrationEvent,
   type CreateEventInput,
-  type IntegrationType,
   type ResolutionStatus,
+  type Resolution,
 } from '../types/index.js';
-
-/**
- * Helper to safely get timestamp from Date | string
- */
-function toDate(value: Date | string): Date {
-  return value instanceof Date ? value : new Date(value);
-}
 
 export type SortField = 'timestamp' | 'integration' | 'eventType' | 'status';
 export type SortOrder = 'asc' | 'desc';
 
 export interface GetEventsOptions {
-  integration?: IntegrationType;
+  integration?: string;
   status?: 'success' | 'failure';
   resolutionStatus?: ResolutionStatus;
   limit?: number;
@@ -50,117 +43,133 @@ export interface EventStats {
   lastSync: Date | string | null;
 }
 
-/**
- * EventStore class for managing integration events
- * In production, this would be backed by a database
- */
-export class EventStore {
-  private events: IntegrationEvent[] = [];
-  private maxEvents: number;
+interface EventRow {
+  id: string;
+  integration: string;
+  event_type: string;
+  status: string;
+  timestamp: number;
+  payload: string;
+  error: string | null;
+  classification: string | null;
+  resolution: string | null;
+}
 
-  constructor(maxEvents: number = EVENT_STORE.MAX_EVENTS_IN_MEMORY) {
-    this.maxEvents = maxEvents;
+function rowToEvent(row: EventRow): IntegrationEvent {
+  return {
+    id: row.id,
+    integration: row.integration,
+    eventType: row.event_type,
+    status: row.status as IntegrationEvent['status'],
+    timestamp: new Date(row.timestamp),
+    payload: JSON.parse(row.payload),
+    error: row.error ? JSON.parse(row.error) : undefined,
+    classification: row.classification ? JSON.parse(row.classification) : undefined,
+    resolution: row.resolution ? JSON.parse(row.resolution) : undefined,
+  };
+}
+
+// Column to sort by, whitelisted (never interpolate user input into SQL identifiers)
+const SORT_COLUMNS: Record<SortField, string> = {
+  timestamp: 'timestamp',
+  integration: 'integration',
+  eventType: 'event_type',
+  status: 'status',
+};
+
+/**
+ * Build a WHERE clause + params shared by the paginated query and its count query
+ */
+function buildWhere(options?: GetEventsOptions): { clause: string; params: unknown[] } {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (options?.integration) {
+    conditions.push('integration = ?');
+    params.push(options.integration);
+  }
+  if (options?.status) {
+    conditions.push('status = ?');
+    params.push(options.status);
+  }
+  if (options?.resolutionStatus) {
+    conditions.push("COALESCE(json_extract(resolution, '$.status'), 'open') = ?");
+    params.push(options.resolutionStatus);
+  }
+  if (options?.since) {
+    conditions.push('timestamp >= ?');
+    params.push(options.since.getTime());
+  }
+  if (options?.search) {
+    const term = `%${options.search.toLowerCase()}%`;
+    conditions.push(
+      `(LOWER(event_type) LIKE ? OR LOWER(integration) LIKE ? OR LOWER(json_extract(error, '$.message')) LIKE ? OR LOWER(json_extract(error, '$.code')) LIKE ?)`
+    );
+    params.push(term, term, term, term);
   }
 
-  /**
-   * Create a new event
-   */
+  return {
+    clause: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
+    params,
+  };
+}
+
+export class EventStore {
   create(input: CreateEventInput): IntegrationEvent {
+    const timestamp = new Date();
     const event: IntegrationEvent = {
       id: uuidv4(),
       integration: input.integration,
       eventType: input.eventType,
       status: input.status,
-      timestamp: new Date(),
+      timestamp,
       payload: input.payload,
       error: input.error,
     };
 
-    this.events.unshift(event); // Add to beginning for recent-first ordering
-
-    // Keep only last N events in memory
-    if (this.events.length > this.maxEvents) {
-      this.events.pop();
-    }
+    db.prepare(
+      `INSERT INTO events (id, integration, event_type, status, timestamp, payload, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      event.id,
+      event.integration,
+      event.eventType,
+      event.status,
+      timestamp.getTime(),
+      JSON.stringify(event.payload),
+      event.error ? JSON.stringify(event.error) : null
+    );
 
     return event;
   }
 
-  /**
-   * Get events with optional filtering
-   */
   getAll(options?: GetEventsOptions): IntegrationEvent[] {
-    const result = this.getPaginated(options);
-    return result.events;
+    return this.getPaginated(options).events;
   }
 
-  /**
-   * Get events with pagination
-   */
   getPaginated(options?: GetEventsOptions): PaginatedEvents {
-    let filtered = [...this.events];
-
-    if (options?.integration) {
-      filtered = filtered.filter((e) => e.integration === options.integration);
-    }
-
-    if (options?.status) {
-      filtered = filtered.filter((e) => e.status === options.status);
-    }
-
-    if (options?.resolutionStatus) {
-      filtered = filtered.filter((e) => {
-        const status = e.resolution?.status || 'open';
-        return status === options.resolutionStatus;
-      });
-    }
-
-    if (options?.since) {
-      const sinceTime = options.since.getTime();
-      filtered = filtered.filter((e) => toDate(e.timestamp).getTime() >= sinceTime);
-    }
-
-    if (options?.search) {
-      const searchLower = options.search.toLowerCase();
-      filtered = filtered.filter((e) =>
-        e.eventType.toLowerCase().includes(searchLower) ||
-        e.integration.toLowerCase().includes(searchLower) ||
-        e.error?.message?.toLowerCase().includes(searchLower) ||
-        e.error?.code?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Sort
-    const sortBy = options?.sortBy || 'timestamp';
-    const sortOrder = options?.sortOrder || 'desc';
-
-    filtered.sort((a, b) => {
-      let comparison = 0;
-      switch (sortBy) {
-        case 'timestamp':
-          comparison = toDate(a.timestamp).getTime() - toDate(b.timestamp).getTime();
-          break;
-        case 'integration':
-          comparison = a.integration.localeCompare(b.integration);
-          break;
-        case 'eventType':
-          comparison = a.eventType.localeCompare(b.eventType);
-          break;
-        case 'status':
-          comparison = a.status.localeCompare(b.status);
-          break;
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    const total = filtered.length;
-    const offset = options?.offset || 0;
+    const { clause, params } = buildWhere(options);
+    const sortColumn = SORT_COLUMNS[options?.sortBy || 'timestamp'];
+    const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
     const limit = options?.limit || EVENT_STORE.DEFAULT_PAGE_SIZE;
+    const offset = options?.offset || 0;
 
-    const paginated = filtered.slice(offset, offset + limit);
+    const total = (
+      db.prepare(`SELECT COUNT(*) as count FROM events ${clause}`).get(...params) as {
+        count: number;
+      }
+    ).count;
+
+    // rowid as a tiebreaker preserves insertion order when the sort column ties
+    // (e.g. two events created in the same millisecond)
+    const rows = db
+      .prepare(
+        `SELECT * FROM events ${clause} ORDER BY ${sortColumn} ${sortOrder}, rowid ${sortOrder} LIMIT ? OFFSET ?`
+      )
+      .all(...params, limit, offset) as EventRow[];
 
     return {
-      events: paginated,
+      events: rows.map(rowToEvent),
       total,
       offset,
       limit,
@@ -168,118 +177,114 @@ export class EventStore {
     };
   }
 
-  /**
-   * Get a single event by ID
-   */
   getById(id: string): IntegrationEvent | undefined {
-    return this.events.find((e) => e.id === id);
+    const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow | undefined;
+    return row ? rowToEvent(row) : undefined;
   }
 
-  /**
-   * Update event classification
-   */
   updateClassification(
     id: string,
     classification: IntegrationEvent['classification']
   ): IntegrationEvent | undefined {
-    const event = this.events.find((e) => e.id === id);
-    if (event) {
-      event.classification = classification;
-    }
-    return event;
-  }
+    const existing = this.getById(id);
+    if (!existing) return undefined;
 
-  /**
-   * Get statistics for an integration
-   */
-  getStats(integration: IntegrationType): EventStats {
-    const now = new Date();
-    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const last24hTime = last24h.getTime();
-
-    const integrationEvents = this.events.filter(
-      (e) => e.integration === integration && toDate(e.timestamp).getTime() >= last24hTime
+    db.prepare('UPDATE events SET classification = ? WHERE id = ?').run(
+      classification ? JSON.stringify(classification) : null,
+      id
     );
 
-    const total = integrationEvents.length;
-    const failures = integrationEvents.filter((e) => e.status === 'failure').length;
+    return { ...existing, classification };
+  }
+
+  getDistinctIntegrations(): string[] {
+    const rows = db.prepare('SELECT DISTINCT integration FROM events').all() as {
+      integration: string;
+    }[];
+    return rows.map((r) => r.integration);
+  }
+
+  getStats(integration: string): EventStats {
+    const last24hTime = Date.now() - 24 * 60 * 60 * 1000;
+
+    const row = db
+      .prepare(
+        `SELECT
+           COUNT(*) as total,
+           SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) as failures,
+           MAX(timestamp) as lastTimestamp
+         FROM events
+         WHERE integration = ? AND timestamp >= ?`
+      )
+      .get(integration, last24hTime) as { total: number; failures: number; lastTimestamp: number | null };
+
+    const total = row.total;
+    const failures = row.failures || 0;
     const successRate = total > 0 ? Math.round(((total - failures) / total) * 100) : 100;
-    const lastSync = integrationEvents.length > 0 ? integrationEvents[0].timestamp : null;
 
     return {
       eventsLast24h: total,
       errorsLast24h: failures,
       successRate,
-      lastSync,
+      lastSync: row.lastTimestamp ? new Date(row.lastTimestamp) : null,
     };
   }
 
-  /**
-   * Acknowledge a failure event
-   */
+  private setResolution(
+    existing: IntegrationEvent,
+    resolution: Resolution
+  ): IntegrationEvent {
+    db.prepare('UPDATE events SET resolution = ? WHERE id = ?').run(
+      JSON.stringify(resolution),
+      existing.id
+    );
+    return { ...existing, resolution };
+  }
+
   acknowledge(id: string, acknowledgedBy: string = 'anonymous'): IntegrationEvent | undefined {
-    const event = this.events.find((e) => e.id === id);
-    if (event && event.status === 'failure') {
-      event.resolution = {
-        status: 'acknowledged',
-        acknowledgedAt: new Date(),
-        acknowledgedBy,
-      };
-    }
-    return event;
+    const existing = this.getById(id);
+    if (!existing || existing.status !== 'failure') return undefined;
+
+    return this.setResolution(existing, {
+      status: 'acknowledged',
+      acknowledgedAt: new Date(),
+      acknowledgedBy,
+    });
   }
 
-  /**
-   * Resolve a failure event
-   */
   resolve(id: string, resolvedBy: string = 'anonymous', notes?: string): IntegrationEvent | undefined {
-    const event = this.events.find((e) => e.id === id);
-    if (event && event.status === 'failure') {
-      event.resolution = {
-        ...event.resolution,
-        status: 'resolved',
-        resolvedAt: new Date(),
-        resolvedBy,
-        notes,
-      };
-    }
-    return event;
+    const existing = this.getById(id);
+    if (!existing || existing.status !== 'failure') return undefined;
+
+    return this.setResolution(existing, {
+      ...existing.resolution,
+      status: 'resolved',
+      resolvedAt: new Date(),
+      resolvedBy,
+      notes,
+    });
   }
 
-  /**
-   * Reopen a resolved event
-   */
   reopen(id: string): IntegrationEvent | undefined {
-    const event = this.events.find((e) => e.id === id);
-    if (event) {
-      event.resolution = { status: 'open' };
-    }
-    return event;
+    const existing = this.getById(id);
+    if (!existing) return undefined;
+
+    return this.setResolution(existing, { status: 'open' });
   }
 
-  /**
-   * Clear all events
-   */
   clear(): void {
-    this.events.length = 0;
+    db.prepare('DELETE FROM events').run();
   }
 
-  /**
-   * Get total event count
-   */
   get count(): number {
-    return this.events.length;
+    return (db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number }).count;
   }
 }
 
 // ============ Default instance and backwards-compatible exports ============
 
-/**
- * Default singleton instance for production use
- */
 const defaultStore = new EventStore();
 
-// Backwards-compatible function exports that delegate to the default instance
 export function createEvent(input: CreateEventInput): IntegrationEvent {
   return defaultStore.create(input);
 }
@@ -303,8 +308,12 @@ export function updateEventClassification(
   return defaultStore.updateClassification(id, classification);
 }
 
-export function getEventStats(integration: IntegrationType): EventStats {
+export function getEventStats(integration: string): EventStats {
   return defaultStore.getStats(integration);
+}
+
+export function getDistinctIntegrations(): string[] {
+  return defaultStore.getDistinctIntegrations();
 }
 
 export function acknowledgeEvent(

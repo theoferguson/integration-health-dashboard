@@ -8,14 +8,6 @@ interface ErrorTriageProps {
   onUpdated: (event: IntegrationEvent) => void;
 }
 
-const integrationLabels: Record<string, string> = {
-  procore: 'Procore',
-  gusto: 'Gusto',
-  quickbooks: 'QuickBooks',
-  stripe_issuing: 'Stripe Issuing',
-  certified_payroll: 'Certified Payroll',
-};
-
 const severityColors: Record<string, string> = {
   low: 'bg-blue-100 text-blue-800 border-blue-200',
   medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -123,7 +115,7 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
                 </span>
               </div>
               <p className="text-sm text-gray-500">
-                {integrationLabels[event.integration]} · {event.eventType}
+                {event.integration} · {event.eventType}
               </p>
             </div>
             <button

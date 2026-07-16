@@ -30,7 +30,7 @@ export function IntegrationCard({ integration, onClick }: IntegrationCardProps) 
       }`}
     >
       <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-        <h3 className="font-semibold text-base sm:text-lg">{integration.name}</h3>
+        <h3 className="font-semibold text-base sm:text-lg">{integration.id}</h3>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <span
             className={`w-2 h-2 rounded-full ${statusDots[integration.status]}`}
@@ -38,8 +38,6 @@ export function IntegrationCard({ integration, onClick }: IntegrationCardProps) 
           <span className="text-xs sm:text-sm capitalize">{integration.status}</span>
         </div>
       </div>
-
-      <p className="text-xs sm:text-sm opacity-75 mb-2 sm:mb-3 line-clamp-2">{integration.description}</p>
 
       <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-xs sm:text-sm">
         <div>

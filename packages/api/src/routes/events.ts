@@ -10,7 +10,7 @@ import {
 } from '../services/eventStore.js';
 import type { SortField, SortOrder } from '../services/eventStore.js';
 import { classifyError } from '../services/classifier.js';
-import type { IntegrationType, ResolutionStatus } from '../types/index.js';
+import type { ResolutionStatus } from '../types/index.js';
 
 const router = Router();
 
@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
   const { integration, status, resolution_status, limit, since } = req.query;
 
   const events = getEvents({
-    integration: integration as IntegrationType | undefined,
+    integration: integration as string | undefined,
     status: status as 'success' | 'failure' | undefined,
     resolutionStatus: resolution_status as ResolutionStatus | undefined,
     limit: limit ? parseInt(limit as string, 10) : 50,
@@ -44,7 +44,7 @@ router.get('/paginated', (req, res) => {
   } = req.query;
 
   const result = getEventsPaginated({
-    integration: integration as IntegrationType | undefined,
+    integration: integration as string | undefined,
     status: status as 'success' | 'failure' | undefined,
     resolutionStatus: resolution_status as ResolutionStatus | undefined,
     limit: limit ? parseInt(limit as string, 10) : 25,
