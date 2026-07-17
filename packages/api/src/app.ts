@@ -11,6 +11,10 @@ const __dirname = path.dirname(__filename);
 export function createApp() {
   const app = express();
 
+  // Fly terminates TLS at the edge and forwards over plain HTTP; without this,
+  // req.protocol always reports 'http', breaking the GitHub OAuth redirect_uri.
+  app.set('trust proxy', true);
+
   // Middleware
   app.use(cors());
   app.use(express.json());
