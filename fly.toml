@@ -8,6 +8,7 @@ primary_region = "sjc"
 [env]
   NODE_ENV = "production"
   PORT = "8080"
+  DB_PATH = "/data/ihd.db"
 
 [http_service]
   internal_port = 8080
@@ -16,6 +17,10 @@ primary_region = "sjc"
   auto_start_machines = true
   min_machines_running = 0
   processes = ["app"]
+
+[[mounts]]
+  source = "ihd_data"
+  destination = "/data"
 
 [[vm]]
   memory = "256mb"
