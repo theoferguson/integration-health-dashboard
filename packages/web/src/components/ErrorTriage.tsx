@@ -39,6 +39,7 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
   const [showResolveForm, setShowResolveForm] = useState(false);
 
   const resolutionStatus = event.resolution?.status || 'open';
+  const isFailure = event.status === 'failure';
 
   const handleClassify = async () => {
     setIsClassifying(true);
@@ -106,11 +107,13 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
           <div className="flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-semibold">Error Triage</h2>
+                <h2 className="text-xl font-semibold">{isFailure ? 'Error Triage' : 'Event Details'}</h2>
                 <span
-                  className={`px-2 py-0.5 text-xs font-medium rounded ${resolutionStatusColors[resolutionStatus]}`}
+                  className={`px-2 py-0.5 text-xs font-medium rounded ${
+                    isFailure ? resolutionStatusColors[resolutionStatus] : 'bg-green-100 text-green-800'
+                  }`}
                 >
-                  {resolutionStatus.toUpperCase()}
+                  {isFailure ? resolutionStatus.toUpperCase() : 'SUCCESS'}
                 </span>
               </div>
               <p className="text-sm text-gray-500">
@@ -176,15 +179,36 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
             </div>
           )}
 
-          {/* Error Details */}
+          {/* Details - shown for every event */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
-              Error Message
-            </h3>
-            <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
-              {event.error?.message || 'No error message'}
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Details</h3>
+            <div className="bg-gray-50 border rounded p-3 text-sm text-gray-700 space-y-1">
+              <p><span className="text-gray-500">Time:</span> {new Date(event.timestamp).toLocaleString()}</p>
+              <p><span className="text-gray-500">Status:</span> {event.status}</p>
             </div>
           </div>
+
+          {/* Payload - shown for every event */}
+          {event.payload && Object.keys(event.payload).length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Payload</h3>
+              <pre className="bg-gray-50 border rounded p-3 text-xs overflow-x-auto max-h-64">
+                {JSON.stringify(event.payload, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Error Details - failures only */}
+          {isFailure && (
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Error Message
+              </h3>
+              <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                {event.error?.message || 'No error message'}
+              </div>
+            </div>
+          )}
 
           {event.error?.context && (
             <div className="mb-6">
@@ -195,8 +219,8 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
             </div>
           )}
 
-          {/* AI Classification */}
-          {event.classification ? (
+          {/* AI Classification - failures only */}
+          {isFailure && (event.classification ? (
             <div className="space-y-4 mb-6">
               <div className="flex items-center gap-3">
                 <span
@@ -292,7 +316,7 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
                 )}
               </button>
             </div>
-          )}
+          ))}
 
           {/* Resolve Form */}
           {showResolveForm && (
@@ -330,7 +354,7 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
             {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
             <div className="flex gap-3">
-              {resolutionStatus === 'open' && (
+              {isFailure && resolutionStatus === 'open' && (
                 <>
                   <button
                     onClick={handleAcknowledge}

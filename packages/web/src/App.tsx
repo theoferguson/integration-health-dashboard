@@ -206,8 +206,8 @@ function App() {
         )}
       </main>
 
-      {/* Error Triage Modal */}
-      {selectedEvent && selectedEvent.status === 'failure' && (
+      {/* Event detail / triage modal - opens for any event; triage tools show only for failures */}
+      {selectedEvent && (
         <ErrorTriage
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
