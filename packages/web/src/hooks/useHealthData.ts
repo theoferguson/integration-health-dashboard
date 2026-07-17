@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Integration, IntegrationEvent, HealthOverview } from '../types';
 import { TIMING } from '../types';
-import { fetchHealth, fetchEvents } from '../api/client';
+import { fetchHealth, fetchEvents, ApiError } from '../api/client';
 
 export interface ErrorStats {
   total: number;
@@ -75,8 +75,17 @@ export function useHealthData(options: UseHealthDataOptions = {}): UseHealthData
       setIntegrations(healthData.integrations);
       setEvents(eventsData);
       setError(null);
-    } catch {
-      setError('Failed to load data. Is the API server running?');
+    } catch (err) {
+      // Data is org-scoped - a signed-out user (401) or a user in no org (403)
+      // isn't an error condition, just a prompt to sign in.
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        setHealth(null);
+        setIntegrations([]);
+        setEvents([]);
+        setError('Sign in with GitHub to view your org’s integration health.');
+      } else {
+        setError('Failed to load data. Is the API server running?');
+      }
     } finally {
       setIsLoading(false);
     }

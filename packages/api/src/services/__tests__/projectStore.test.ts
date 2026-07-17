@@ -3,26 +3,28 @@ import {
   createProject,
   getProjectByApiKey,
   getProjectById,
-  listProjectsForUser,
-  deleteProjectForUser,
+  listProjectsForOrg,
+  deleteProjectForOrg,
 } from '../projectStore.js';
 import { findOrCreateUser } from '../userStore.js';
+import { createOrgForUser } from '../orgStore.js';
 
 describe('projectStore', () => {
   describe('createProject', () => {
-    it('should create an ownerless project when no userId is given (CLI script path)', () => {
+    it('should create an ownerless project when no orgId is given (CLI script path)', () => {
       const project = createProject('cli-project');
 
-      expect(project.userId).toBeNull();
+      expect(project.orgId).toBeNull();
       expect(project.apiKey).toMatch(/^proj_/);
     });
 
-    it('should create a project owned by the given user', () => {
+    it('should create a project owned by the given org', () => {
       const user = findOrCreateUser('owner1');
+      const org = createOrgForUser(user.id, "owner1's org");
 
-      const project = createProject('owned-project', user.id);
+      const project = createProject('owned-project', org.id);
 
-      expect(project.userId).toBe(user.id);
+      expect(project.orgId).toBe(org.id);
     });
   });
 
@@ -40,48 +42,54 @@ describe('projectStore', () => {
     });
   });
 
-  describe('listProjectsForUser', () => {
-    it('should only return projects owned by the given user', () => {
+  describe('listProjectsForOrg', () => {
+    it('should only return projects owned by the given org', () => {
       const alice = findOrCreateUser('alice');
       const bob = findOrCreateUser('bob');
-      createProject('alice-project-1', alice.id);
-      createProject('alice-project-2', alice.id);
-      createProject('bob-project', bob.id);
+      const aliceOrg = createOrgForUser(alice.id, "alice's org");
+      const bobOrg = createOrgForUser(bob.id, "bob's org");
+      createProject('alice-project-1', aliceOrg.id);
+      createProject('alice-project-2', aliceOrg.id);
+      createProject('bob-project', bobOrg.id);
       createProject('nobody-project'); // ownerless, should appear for neither
 
-      const aliceProjects = listProjectsForUser(alice.id);
-      const bobProjects = listProjectsForUser(bob.id);
+      const aliceProjects = listProjectsForOrg(aliceOrg.id);
+      const bobProjects = listProjectsForOrg(bobOrg.id);
 
       expect(aliceProjects).toHaveLength(2);
-      expect(aliceProjects.every((p) => p.userId === alice.id)).toBe(true);
+      expect(aliceProjects.every((p) => p.orgId === aliceOrg.id)).toBe(true);
       expect(bobProjects).toHaveLength(1);
       expect(bobProjects[0].name).toBe('bob-project');
     });
 
-    it('should return an empty array for a user with no projects', () => {
+    it('should return an empty array for an org with no projects', () => {
       const user = findOrCreateUser('lonelyuser');
+      const org = createOrgForUser(user.id, "lonelyuser's org");
 
-      expect(listProjectsForUser(user.id)).toEqual([]);
+      expect(listProjectsForOrg(org.id)).toEqual([]);
     });
   });
 
-  describe('deleteProjectForUser', () => {
-    it('should delete a project owned by the user and return true', () => {
+  describe('deleteProjectForOrg', () => {
+    it('should delete a project owned by the org and return true', () => {
       const user = findOrCreateUser('deleter');
-      const project = createProject('to-delete', user.id);
+      const org = createOrgForUser(user.id, "deleter's org");
+      const project = createProject('to-delete', org.id);
 
-      const result = deleteProjectForUser(project.id, user.id);
+      const result = deleteProjectForOrg(project.id, org.id);
 
       expect(result).toBe(true);
       expect(getProjectById(project.id)).toBeUndefined();
     });
 
-    it('should not delete a project owned by a different user, and return false', () => {
+    it('should not delete a project owned by a different org, and return false', () => {
       const owner = findOrCreateUser('realowner');
       const attacker = findOrCreateUser('notowner');
-      const project = createProject('protected', owner.id);
+      const ownerOrg = createOrgForUser(owner.id, "realowner's org");
+      const attackerOrg = createOrgForUser(attacker.id, "notowner's org");
+      const project = createProject('protected', ownerOrg.id);
 
-      const result = deleteProjectForUser(project.id, attacker.id);
+      const result = deleteProjectForOrg(project.id, attackerOrg.id);
 
       expect(result).toBe(false);
       expect(getProjectById(project.id)).toBeDefined();
@@ -89,8 +97,9 @@ describe('projectStore', () => {
 
     it('should return false for a non-existent project id', () => {
       const user = findOrCreateUser('someuser');
+      const org = createOrgForUser(user.id, "someuser's org");
 
-      expect(deleteProjectForUser('not-a-real-id', user.id)).toBe(false);
+      expect(deleteProjectForOrg('not-a-real-id', org.id)).toBe(false);
     });
   });
 });

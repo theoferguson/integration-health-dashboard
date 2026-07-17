@@ -245,3 +245,32 @@ export async function createProjectRequest(name: string): Promise<CreatedProject
 export async function deleteProjectRequest(id: string): Promise<void> {
   await apiCall(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
 }
+
+// ============ Org APIs ============
+
+export type OrgRole = 'admin' | 'viewer';
+
+export interface OrgState {
+  org: { id: string; name: string; inviteCode?: string } | null;
+  role?: OrgRole;
+}
+
+export async function fetchOrg(): Promise<OrgState> {
+  return apiCall(buildUrl('/orgs/me'));
+}
+
+export async function regenerateInvite(): Promise<string> {
+  const data = await apiCall<{ inviteCode: string }>(`${API_BASE}/orgs/invite/regenerate`, {
+    method: 'POST',
+  });
+  return data.inviteCode;
+}
+
+export async function joinOrgRequest(code: string): Promise<{ id: string; name: string }> {
+  const data = await apiCall<{ org: { id: string; name: string } }>(`${API_BASE}/orgs/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  return data.org;
+}

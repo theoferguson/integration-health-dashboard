@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../app.js';
 import { createSessionToken } from '../../services/authToken.js';
 import { findOrCreateUser } from '../../services/userStore.js';
+import { getMembershipForUser } from '../../services/orgStore.js';
 
 const app = createApp();
 
@@ -62,6 +63,11 @@ describe('GET /api/auth/callback', () => {
 
     expect(response.status).toBe(302);
     expect(setCookieHeaders(response).some((c) => c.startsWith('ihd_session='))).toBe(true);
+
+    // First login auto-creates a personal org with the user as admin
+    const user = findOrCreateUser('brand-new-user');
+    const membership = getMembershipForUser(user.id);
+    expect(membership?.role).toBe('admin');
   });
 
   it('should log in as the existing user on a repeat login, not create a duplicate', async () => {

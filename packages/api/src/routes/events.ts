@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   getEvents,
   getEventsPaginated,
-  getEventById,
+  getEventByIdForOrg,
   updateEventClassification,
   acknowledgeEvent,
   resolveEvent,
@@ -11,8 +11,18 @@ import {
 import type { SortField, SortOrder } from '../services/eventStore.js';
 import { classifyError } from '../services/classifier.js';
 import type { ResolutionStatus } from '../types/index.js';
+import { getSession, requireOrgMember } from '../middleware/auth.js';
+import { getMembershipForUser } from '../services/orgStore.js';
 
 const router = Router();
+
+// All event data is scoped to the caller's org.
+router.use(requireOrgMember);
+
+function orgIdFor(req: import('express').Request): string {
+  const session = getSession(req)!;
+  return getMembershipForUser(session.userId)!.org.id;
+}
 
 // Get all events with optional filters (simple endpoint)
 router.get('/', (req, res) => {
@@ -24,6 +34,7 @@ router.get('/', (req, res) => {
     resolutionStatus: resolution_status as ResolutionStatus | undefined,
     limit: limit ? parseInt(limit as string, 10) : 50,
     since: since ? new Date(since as string) : undefined,
+    orgId: orgIdFor(req),
   });
 
   res.json({ events, total: events.length });
@@ -53,6 +64,7 @@ router.get('/paginated', (req, res) => {
     sortBy: sort_by as SortField | undefined,
     sortOrder: sort_order as SortOrder | undefined,
     search: search as string | undefined,
+    orgId: orgIdFor(req),
   });
 
   res.json(result);
@@ -60,7 +72,7 @@ router.get('/paginated', (req, res) => {
 
 // Get a single event by ID
 router.get('/:id', (req, res) => {
-  const event = getEventById(req.params.id);
+  const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {
     return res.status(404).json({ error: 'Event not found' });
@@ -71,7 +83,7 @@ router.get('/:id', (req, res) => {
 
 // Classify an error event using AI
 router.post('/:id/classify', async (req, res) => {
-  const event = getEventById(req.params.id);
+  const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {
     return res.status(404).json({ error: 'Event not found' });
@@ -100,7 +112,7 @@ router.post('/:id/classify', async (req, res) => {
 // Acknowledge an error event
 router.post('/:id/acknowledge', (req, res) => {
   const { acknowledged_by } = req.body;
-  const event = getEventById(req.params.id);
+  const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {
     return res.status(404).json({ error: 'Event not found' });
@@ -117,7 +129,7 @@ router.post('/:id/acknowledge', (req, res) => {
 // Resolve an error event
 router.post('/:id/resolve', (req, res) => {
   const { resolved_by, notes } = req.body;
-  const event = getEventById(req.params.id);
+  const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {
     return res.status(404).json({ error: 'Event not found' });
@@ -133,7 +145,7 @@ router.post('/:id/resolve', (req, res) => {
 
 // Reopen a resolved/acknowledged event
 router.post('/:id/reopen', (req, res) => {
-  const event = getEventById(req.params.id);
+  const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {
     return res.status(404).json({ error: 'Event not found' });

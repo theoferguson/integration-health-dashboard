@@ -4,6 +4,7 @@ import integrationsRoutes from './integrations.js';
 import ingestRoutes from './ingest.js';
 import authRoutes from './auth.js';
 import projectsRoutes from './projects.js';
+import orgsRoutes from './orgs.js';
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use('/integrations', integrationsRoutes);
 router.use('/ingest', ingestRoutes);
 router.use('/auth', authRoutes);
 router.use('/projects', projectsRoutes);
+router.use('/orgs', orgsRoutes);
 
 export default router;

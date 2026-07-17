@@ -3,15 +3,23 @@ import request from 'supertest';
 import { createApp } from '../../app.js';
 import { clearEvents } from '../../services/eventStore.js';
 import { createProject, type Project } from '../../services/projectStore.js';
+import { findOrCreateUser } from '../../services/userStore.js';
+import { createOrgForUser } from '../../services/orgStore.js';
+import { createSessionToken } from '../../services/authToken.js';
 
 const app = createApp();
 
 describe('POST /api/ingest', () => {
   let project: Project;
+  let cookie: string;
+  let seq = 0;
 
   beforeEach(() => {
     clearEvents();
-    project = createProject(`test-project-${Math.random()}`);
+    const user = findOrCreateUser(`ingest-test-user-${seq++}`);
+    const org = createOrgForUser(user.id, `${user.githubLogin}'s org`);
+    project = createProject(`test-project-${Math.random()}`, org.id);
+    cookie = `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
   });
 
   const validBody = {
@@ -80,7 +88,9 @@ describe('POST /api/ingest', () => {
     expect(response.body.event.payload).toEqual({ zone: 'NYZ072' });
 
     // Confirm it's actually queryable through the regular events API
-    const eventsResponse = await request(app).get('/api/events?integration=weather');
+    const eventsResponse = await request(app)
+      .get('/api/events?integration=weather')
+      .set('Cookie', cookie);
     expect(eventsResponse.body.events).toHaveLength(1);
   });
 
@@ -117,7 +127,9 @@ describe('POST /api/ingest', () => {
     expect(second.body.duplicate).toBe(true);
     expect(second.body.event.id).toBe(first.body.event.id);
 
-    const eventsResponse = await request(app).get('/api/events?integration=weather');
+    const eventsResponse = await request(app)
+      .get('/api/events?integration=weather')
+      .set('Cookie', cookie);
     expect(eventsResponse.body.events).toHaveLength(1);
   });
 

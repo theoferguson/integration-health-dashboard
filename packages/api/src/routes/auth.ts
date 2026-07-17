@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { createSessionToken } from '../services/authToken.js';
 import { findOrCreateUser } from '../services/userStore.js';
+import { getMembershipForUser, createOrgForUser } from '../services/orgStore.js';
 import { getSession } from '../middleware/auth.js';
 
 const router = Router();
@@ -87,6 +88,9 @@ router.get('/callback', async (req, res) => {
     // Open signup: any successful GitHub login gets an account. This is a
     // generic platform any project can report into, not a single-admin tool.
     const user = findOrCreateUser(ghUser.login);
+    if (!getMembershipForUser(user.id)) {
+      createOrgForUser(user.id, `${user.githubLogin}'s org`);
+    }
     res.cookie(SESSION_COOKIE, createSessionToken(user.id, user.githubLogin), {
       httpOnly: true,
       secure: isProd,

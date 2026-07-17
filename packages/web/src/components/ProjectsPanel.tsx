@@ -3,21 +3,33 @@ import {
   fetchProjects,
   createProjectRequest,
   deleteProjectRequest,
+  regenerateInvite,
+  joinOrgRequest,
   type ProjectSummary,
   type CreatedProject,
+  type OrgRole,
 } from '../api/client';
 
 interface ProjectsPanelProps {
   loggedIn: boolean;
+  role?: OrgRole;
+  org: { id: string; name: string; inviteCode?: string } | null;
+  /** Called after the user joins a different org, so the parent can reload auth/org state. */
+  onOrgChange: () => void;
 }
 
-export function ProjectsPanel({ loggedIn }: ProjectsPanelProps) {
+export function ProjectsPanel({ loggedIn, role, org, onOrgChange }: ProjectsPanelProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [justCreated, setJustCreated] = useState<CreatedProject | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | undefined>(org?.inviteCode);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const isAdmin = role === 'admin';
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -34,6 +46,11 @@ export function ProjectsPanel({ loggedIn }: ProjectsPanelProps) {
   useEffect(() => {
     if (loggedIn) load();
   }, [loggedIn, load]);
+
+  // Keep the shown invite code in sync when the active org changes.
+  useEffect(() => {
+    setInviteCode(org?.inviteCode);
+  }, [org?.inviteCode]);
 
   if (!loggedIn) {
     return (
@@ -76,27 +93,122 @@ export function ProjectsPanel({ loggedIn }: ProjectsPanelProps) {
     }
   };
 
+  const handleRegenerate = async () => {
+    try {
+      setInviteCode(await regenerateInvite());
+    } catch {
+      setError('Failed to regenerate invite code');
+    }
+  };
+
+  const handleJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCode.trim()) return;
+    setJoinError(null);
+    try {
+      await joinOrgRequest(joinCode.trim());
+      setJoinCode('');
+      onOrgChange();
+      await load();
+    } catch {
+      setJoinError('Invalid invite code');
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <form onSubmit={handleCreate} className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">Create a project</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. integrations-host-app"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={isCreating || !name.trim()}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+      {/* Org header */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <div className="text-xs text-gray-400 uppercase tracking-wide">Organization</div>
+            <div className="text-base font-semibold text-gray-900">{org?.name ?? '—'}</div>
+          </div>
+          <span
+            className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+              isAdmin ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'
+            }`}
           >
-            {isCreating ? 'Creating…' : 'Create'}
-          </button>
+            {role ?? 'member'}
+          </span>
         </div>
-      </form>
+
+        {isAdmin && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="text-sm font-medium text-gray-900 mb-1">Invite code</div>
+            <p className="text-xs text-gray-500 mb-2">
+              Share this with teammates. They sign in with GitHub, then paste it below to join your
+              org as a viewer.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 overflow-x-auto">
+                {inviteCode ?? '—'}
+              </code>
+              <button
+                onClick={() => inviteCode && navigator.clipboard.writeText(inviteCode)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Copy
+              </button>
+              <button
+                onClick={handleRegenerate}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Regenerate
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Join a different org (available to everyone) */}
+        <form onSubmit={handleJoin} className="mt-4 pt-4 border-t border-gray-100">
+          <div className="text-sm font-medium text-gray-900 mb-2">Join another org</div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+              placeholder="Paste an invite code"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={!joinCode.trim()}
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            >
+              Join
+            </button>
+          </div>
+          {joinError && <p className="mt-2 text-xs text-red-600">{joinError}</p>}
+        </form>
+      </div>
+
+      {/* Create a project (admin only) */}
+      {isAdmin ? (
+        <form onSubmit={handleCreate} className="bg-white rounded-lg border border-gray-200 p-4">
+          <h2 className="text-base font-semibold text-gray-900 mb-3">Create a project</h2>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. integrations-host-app"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={isCreating || !name.trim()}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isCreating ? 'Creating…' : 'Create'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 text-sm text-gray-500">
+          You have viewer access to this org. Only admins can create or delete projects.
+        </div>
+      )}
 
       {justCreated && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -144,12 +256,14 @@ export function ProjectsPanel({ loggedIn }: ProjectsPanelProps) {
                   Created {new Date(project.createdAt).toLocaleDateString()}
                 </div>
               </div>
-              <button
-                onClick={() => handleDelete(project.id)}
-                className="px-3 py-1 text-xs text-red-600 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50"
-              >
-                Delete
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleDelete(project.id)}
+                  className="px-3 py-1 text-xs text-red-600 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           ))
         )}

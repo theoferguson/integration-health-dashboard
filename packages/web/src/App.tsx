@@ -14,7 +14,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('integrations');
   const [filter, setFilter] = useState<'all' | 'failures'>('all');
   const [selectedEvent, setSelectedEvent] = useState<IntegrationEvent | null>(null);
-  const { auth, signOut } = useAuth();
+  const { auth, org, role, signOut, refresh: refreshAuth } = useAuth();
 
   // Custom hooks for data management
   const {
@@ -71,7 +71,7 @@ function App() {
                   onClick={signOut}
                   className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
-                  Signed in as {auth.login} · Sign out
+                  {org ? `${org.name} · ` : ''}Signed in as {auth.login} · Sign out
                 </button>
               ) : (
                 <a
@@ -118,11 +118,23 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
             {error}
-            <p className="text-sm mt-1">
-              Make sure the API is running: <code>npm run dev:api</code>
-            </p>
+            {error.includes('API server') && (
+              <p className="text-sm mt-1">
+                Make sure the API is running: <code>npm run dev:api</code>
+              </p>
+            )}
+            {!auth?.loggedIn && (
+              <p className="mt-3">
+                <a
+                  href="/api/auth/login"
+                  className="inline-block px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800"
+                >
+                  Sign in with GitHub
+                </a>
+              </p>
+            )}
           </div>
         )}
 
@@ -184,7 +196,14 @@ function App() {
           <EventsView onEventClick={setSelectedEvent} />
         )}
 
-        {activeTab === 'projects' && <ProjectsPanel loggedIn={auth?.loggedIn ?? false} />}
+        {activeTab === 'projects' && (
+          <ProjectsPanel
+            loggedIn={auth?.loggedIn ?? false}
+            role={role}
+            org={org}
+            onOrgChange={refreshAuth}
+          />
+        )}
       </main>
 
       {/* Error Triage Modal */}

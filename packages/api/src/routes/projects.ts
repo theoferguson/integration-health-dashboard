@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { requireAuth, getSession } from '../middleware/auth.js';
-import { createProject, listProjectsForUser, deleteProjectForUser } from '../services/projectStore.js';
+import { getSession, requireOrgMember, requireOrgAdmin } from '../middleware/auth.js';
+import { getMembershipForUser } from '../services/orgStore.js';
+import { createProject, listProjectsForOrg, deleteProjectForOrg } from '../services/projectStore.js';
 
 const router = Router();
 
-router.use(requireAuth);
+router.use(requireOrgMember);
 
 router.get('/', (req, res) => {
-  const session = getSession(req)!; // requireAuth already guarantees this
-  const projects = listProjectsForUser(session.userId).map((p) => ({
+  const session = getSession(req)!;
+  const membership = getMembershipForUser(session.userId)!; // requireOrgMember already guarantees this
+  const projects = listProjectsForOrg(membership.org.id).map((p) => ({
     id: p.id,
     name: p.name,
     createdAt: p.createdAt,
@@ -17,8 +19,9 @@ router.get('/', (req, res) => {
   res.json({ projects });
 });
 
-router.post('/', (req, res) => {
+router.post('/', requireOrgAdmin, (req, res) => {
   const session = getSession(req)!;
+  const membership = getMembershipForUser(session.userId)!;
   const { name } = req.body;
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -26,13 +29,14 @@ router.post('/', (req, res) => {
     return;
   }
 
-  const project = createProject(name.trim(), session.userId);
+  const project = createProject(name.trim(), membership.org.id);
   res.status(201).json({ project });
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireOrgAdmin, (req, res) => {
   const session = getSession(req)!;
-  const deleted = deleteProjectForUser(req.params.id, session.userId);
+  const membership = getMembershipForUser(session.userId)!;
+  const deleted = deleteProjectForOrg(req.params.id, membership.org.id);
 
   if (!deleted) {
     res.status(404).json({ error: 'Project not found' });

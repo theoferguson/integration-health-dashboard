@@ -26,6 +26,8 @@ export interface GetEventsOptions {
   sortBy?: SortField;
   sortOrder?: SortOrder;
   search?: string;
+  /** Scope results to events belonging to this org's projects. */
+  orgId?: string;
 }
 
 export interface PaginatedEvents {
@@ -85,6 +87,10 @@ function buildWhere(options?: GetEventsOptions): { clause: string; params: unkno
   const conditions: string[] = [];
   const params: unknown[] = [];
 
+  if (options?.orgId) {
+    conditions.push('project_id IN (SELECT id FROM projects WHERE org_id = ?)');
+    params.push(options.orgId);
+  }
   if (options?.integration) {
     conditions.push('integration = ?');
     params.push(options.integration);
@@ -193,6 +199,16 @@ export class EventStore {
     return row ? rowToEvent(row) : undefined;
   }
 
+  /** Like getById, but only returns the event if it belongs to the given org's projects. */
+  getByIdForOrg(id: string, orgId: string): IntegrationEvent | undefined {
+    const row = db
+      .prepare(
+        'SELECT * FROM events WHERE id = ? AND project_id IN (SELECT id FROM projects WHERE org_id = ?)'
+      )
+      .get(id, orgId) as EventRow | undefined;
+    return row ? rowToEvent(row) : undefined;
+  }
+
   updateClassification(
     id: string,
     classification: IntegrationEvent['classification']
@@ -208,15 +224,24 @@ export class EventStore {
     return { ...existing, classification };
   }
 
-  getDistinctIntegrations(): string[] {
-    const rows = db.prepare('SELECT DISTINCT integration FROM events').all() as {
-      integration: string;
-    }[];
+  getDistinctIntegrations(orgId?: string): string[] {
+    const rows = (
+      orgId
+        ? db.prepare(
+            'SELECT DISTINCT integration FROM events WHERE project_id IN (SELECT id FROM projects WHERE org_id = ?)'
+          ).all(orgId)
+        : db.prepare('SELECT DISTINCT integration FROM events').all()
+    ) as { integration: string }[];
     return rows.map((r) => r.integration);
   }
 
-  getStats(integration: string): EventStats {
+  getStats(integration: string, orgId?: string): EventStats {
     const last24hTime = Date.now() - 24 * 60 * 60 * 1000;
+
+    const orgClause = orgId
+      ? 'AND project_id IN (SELECT id FROM projects WHERE org_id = ?)'
+      : '';
+    const orgParams = orgId ? [orgId] : [];
 
     const row = db
       .prepare(
@@ -225,9 +250,9 @@ export class EventStore {
            SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) as failures,
            MAX(timestamp) as lastTimestamp
          FROM events
-         WHERE integration = ? AND timestamp >= ?`
+         WHERE integration = ? AND timestamp >= ? ${orgClause}`
       )
-      .get(integration, last24hTime) as { total: number; failures: number; lastTimestamp: number | null };
+      .get(integration, last24hTime, ...orgParams) as { total: number; failures: number; lastTimestamp: number | null };
 
     const total = row.total;
     const failures = row.failures || 0;
@@ -319,6 +344,10 @@ export function getEventById(id: string): IntegrationEvent | undefined {
   return defaultStore.getById(id);
 }
 
+export function getEventByIdForOrg(id: string, orgId: string): IntegrationEvent | undefined {
+  return defaultStore.getByIdForOrg(id, orgId);
+}
+
 export function updateEventClassification(
   id: string,
   classification: IntegrationEvent['classification']
@@ -326,12 +355,12 @@ export function updateEventClassification(
   return defaultStore.updateClassification(id, classification);
 }
 
-export function getEventStats(integration: string): EventStats {
-  return defaultStore.getStats(integration);
+export function getEventStats(integration: string, orgId?: string): EventStats {
+  return defaultStore.getStats(integration, orgId);
 }
 
-export function getDistinctIntegrations(): string[] {
-  return defaultStore.getDistinctIntegrations();
+export function getDistinctIntegrations(orgId?: string): string[] {
+  return defaultStore.getDistinctIntegrations(orgId);
 }
 
 export function acknowledgeEvent(

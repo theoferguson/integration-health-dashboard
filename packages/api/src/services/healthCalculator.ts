@@ -14,8 +14,8 @@ function calculateStatus(successRate: number, errorsLast24h: number): Integratio
   return 'down';
 }
 
-export function getIntegrationHealth(integrationId: string): Integration {
-  const stats = getEventStats(integrationId);
+export function getIntegrationHealth(integrationId: string, orgId?: string): Integration {
+  const stats = getEventStats(integrationId, orgId);
 
   return {
     id: integrationId,
@@ -31,17 +31,17 @@ export function getIntegrationHealth(integrationId: string): Integration {
  * Integrations are discovered dynamically from reported events -
  * there is no static registry of "known" integrations.
  */
-export function getAllIntegrationHealth(): Integration[] {
-  return getDistinctIntegrations().map((id) => getIntegrationHealth(id));
+export function getAllIntegrationHealth(orgId?: string): Integration[] {
+  return getDistinctIntegrations(orgId).map((id) => getIntegrationHealth(id, orgId));
 }
 
-export function getOverallHealth(): {
+export function getOverallHealth(orgId?: string): {
   totalIntegrations: number;
   healthy: number;
   degraded: number;
   down: number;
 } {
-  const all = getAllIntegrationHealth();
+  const all = getAllIntegrationHealth(orgId);
   return {
     totalIntegrations: all.length,
     healthy: all.filter((i) => i.status === 'healthy').length,

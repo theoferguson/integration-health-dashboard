@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { randomUUID, randomBytes } from 'crypto';
 
 function resolveDbPath(): string {
   // Isolated, ephemeral DB per test run - never touches disk.
@@ -21,6 +22,21 @@ db.exec(`
     id TEXT PRIMARY KEY,
     github_login TEXT UNIQUE NOT NULL,
     created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS orgs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    invite_code TEXT UNIQUE NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS org_memberships (
+    user_id TEXT NOT NULL REFERENCES users(id),
+    org_id TEXT NOT NULL REFERENCES orgs(id),
+    role TEXT NOT NULL CHECK (role IN ('admin', 'viewer')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, org_id)
   );
 
   CREATE TABLE IF NOT EXISTS projects (
@@ -57,4 +73,30 @@ db.exec(`
 const projectColumns = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
 if (!projectColumns.some((c) => c.name === 'user_id')) {
   db.exec('ALTER TABLE projects ADD COLUMN user_id TEXT REFERENCES users(id)');
+}
+if (!projectColumns.some((c) => c.name === 'org_id')) {
+  db.exec('ALTER TABLE projects ADD COLUMN org_id TEXT REFERENCES orgs(id)');
+}
+
+// Backfill: every user without an org membership gets an auto-created personal
+// org (as admin), and any of their pre-org projects get attached to it.
+const usersWithoutOrg = db
+  .prepare(
+    `SELECT id, github_login FROM users
+     WHERE id NOT IN (SELECT user_id FROM org_memberships)`
+  )
+  .all() as { id: string; github_login: string }[];
+
+for (const user of usersWithoutOrg) {
+  const orgId = randomUUID();
+  const now = Date.now();
+  db.prepare(
+    'INSERT INTO orgs (id, name, invite_code, created_at) VALUES (?, ?, ?, ?)'
+  ).run(orgId, `${user.github_login}'s org`, randomBytes(6).toString('hex'), now);
+  db.prepare(
+    'INSERT INTO org_memberships (user_id, org_id, role, created_at) VALUES (?, ?, ?, ?)'
+  ).run(user.id, orgId, 'admin', now);
+  db.prepare(
+    'UPDATE projects SET org_id = ? WHERE user_id = ? AND org_id IS NULL'
+  ).run(orgId, user.id);
 }
