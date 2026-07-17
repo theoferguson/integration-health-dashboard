@@ -121,259 +121,183 @@ function buildWhere(options?: GetEventsOptions): { clause: string; params: unkno
   };
 }
 
-export class EventStore {
-  create(input: CreateEventInput): IntegrationEvent {
-    const timestamp = new Date();
-    const event: IntegrationEvent = {
-      id: uuidv4(),
-      integration: input.integration,
-      eventType: input.eventType,
-      status: input.status,
-      timestamp,
-      payload: input.payload,
-      error: input.error,
-    };
-
-    db.prepare(
-      `INSERT INTO events (id, project_id, integration, event_type, status, timestamp, payload, error, idempotency_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      event.id,
-      input.projectId ?? null,
-      event.integration,
-      event.eventType,
-      event.status,
-      timestamp.getTime(),
-      JSON.stringify(event.payload),
-      event.error ? JSON.stringify(event.error) : null,
-      input.idempotencyKey ?? null
-    );
-
-    return event;
-  }
-
-  /** Looks up a previously created event by the same project + idempotency key, if any */
-  findByIdempotencyKey(projectId: string, idempotencyKey: string): IntegrationEvent | undefined {
-    const row = db
-      .prepare('SELECT * FROM events WHERE project_id = ? AND idempotency_key = ?')
-      .get(projectId, idempotencyKey) as EventRow | undefined;
-    return row ? rowToEvent(row) : undefined;
-  }
-
-  getAll(options?: GetEventsOptions): IntegrationEvent[] {
-    return this.getPaginated(options).events;
-  }
-
-  getPaginated(options?: GetEventsOptions): PaginatedEvents {
-    const { clause, params } = buildWhere(options);
-    const sortColumn = SORT_COLUMNS[options?.sortBy || 'timestamp'];
-    const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    // Clamp: a negative limit is LIMIT -1 in SQLite = the whole table; a huge
-    // one is a memory hazard. NaN/0/undefined fall back to the default.
-    const rawLimit = options?.limit;
-    const limit =
-      rawLimit && rawLimit > 0
-        ? Math.min(rawLimit, EVENT_STORE.MAX_PAGE_SIZE)
-        : EVENT_STORE.DEFAULT_PAGE_SIZE;
-    const offset = Math.max(0, options?.offset || 0);
-
-    const total = (
-      db.prepare(`SELECT COUNT(*) as count FROM events ${clause}`).get(...params) as {
-        count: number;
-      }
-    ).count;
-
-    // rowid as a tiebreaker preserves insertion order when the sort column ties
-    // (e.g. two events created in the same millisecond)
-    const rows = db
-      .prepare(
-        `SELECT * FROM events ${clause} ORDER BY ${sortColumn} ${sortOrder}, rowid ${sortOrder} LIMIT ? OFFSET ?`
-      )
-      .all(...params, limit, offset) as EventRow[];
-
-    return {
-      events: rows.map(rowToEvent),
-      total,
-      offset,
-      limit,
-      hasMore: offset + limit < total,
-    };
-  }
-
-  getById(id: string): IntegrationEvent | undefined {
-    const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow | undefined;
-    return row ? rowToEvent(row) : undefined;
-  }
-
-  /** Like getById, but only returns the event if it belongs to the given org's projects. */
-  getByIdForOrg(id: string, orgId: string): IntegrationEvent | undefined {
-    const row = db
-      .prepare(
-        'SELECT * FROM events WHERE id = ? AND project_id IN (SELECT id FROM projects WHERE org_id = ?)'
-      )
-      .get(id, orgId) as EventRow | undefined;
-    return row ? rowToEvent(row) : undefined;
-  }
-
-  updateClassification(
-    id: string,
-    classification: IntegrationEvent['classification']
-  ): IntegrationEvent | undefined {
-    const existing = this.getById(id);
-    if (!existing) return undefined;
-
-    db.prepare('UPDATE events SET classification = ? WHERE id = ?').run(
-      classification ? JSON.stringify(classification) : null,
-      id
-    );
-
-    return { ...existing, classification };
-  }
-
-  getDistinctIntegrations(orgId?: string): string[] {
-    const rows = (
-      orgId
-        ? db.prepare(
-            'SELECT DISTINCT integration FROM events WHERE project_id IN (SELECT id FROM projects WHERE org_id = ?)'
-          ).all(orgId)
-        : db.prepare('SELECT DISTINCT integration FROM events').all()
-    ) as { integration: string }[];
-    return rows.map((r) => r.integration);
-  }
-
-  getStats(integration: string, orgId?: string): EventStats {
-    const last24hTime = Date.now() - 24 * 60 * 60 * 1000;
-
-    const orgClause = orgId
-      ? 'AND project_id IN (SELECT id FROM projects WHERE org_id = ?)'
-      : '';
-    const orgParams = orgId ? [orgId] : [];
-
-    const row = db
-      .prepare(
-        `SELECT
-           COUNT(*) as total,
-           SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) as failures,
-           MAX(timestamp) as lastTimestamp
-         FROM events
-         WHERE integration = ? AND timestamp >= ? ${orgClause}`
-      )
-      .get(integration, last24hTime, ...orgParams) as { total: number; failures: number; lastTimestamp: number | null };
-
-    const total = row.total;
-    const failures = row.failures || 0;
-    const successRate = total > 0 ? Math.round(((total - failures) / total) * 100) : 100;
-
-    return {
-      eventsLast24h: total,
-      errorsLast24h: failures,
-      successRate,
-      lastSync: row.lastTimestamp ? new Date(row.lastTimestamp) : null,
-    };
-  }
-
-  private setResolution(
-    existing: IntegrationEvent,
-    resolution: Resolution
-  ): IntegrationEvent {
-    db.prepare('UPDATE events SET resolution = ? WHERE id = ?').run(
-      JSON.stringify(resolution),
-      existing.id
-    );
-    return { ...existing, resolution };
-  }
-
-  acknowledge(id: string, acknowledgedBy: string = 'anonymous'): IntegrationEvent | undefined {
-    const existing = this.getById(id);
-    if (!existing || existing.status !== 'failure') return undefined;
-
-    return this.setResolution(existing, {
-      status: 'acknowledged',
-      acknowledgedAt: new Date(),
-      acknowledgedBy,
-    });
-  }
-
-  resolve(id: string, resolvedBy: string = 'anonymous', notes?: string): IntegrationEvent | undefined {
-    const existing = this.getById(id);
-    if (!existing || existing.status !== 'failure') return undefined;
-
-    return this.setResolution(existing, {
-      ...existing.resolution,
-      status: 'resolved',
-      resolvedAt: new Date(),
-      resolvedBy,
-      notes,
-    });
-  }
-
-  reopen(id: string): IntegrationEvent | undefined {
-    const existing = this.getById(id);
-    if (!existing) return undefined;
-
-    return this.setResolution(existing, { status: 'open' });
-  }
-
-  clear(): void {
-    db.prepare('DELETE FROM events').run();
-  }
-
-  get count(): number {
-    return (db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number }).count;
-  }
-}
-
-// ============ Default instance and backwards-compatible exports ============
-
-const defaultStore = new EventStore();
-
 export function createEvent(input: CreateEventInput): IntegrationEvent {
-  return defaultStore.create(input);
+  const timestamp = new Date();
+  const event: IntegrationEvent = {
+    id: uuidv4(),
+    integration: input.integration,
+    eventType: input.eventType,
+    status: input.status,
+    timestamp,
+    payload: input.payload,
+    error: input.error,
+  };
+
+  db.prepare(
+    `INSERT INTO events (id, project_id, integration, event_type, status, timestamp, payload, error, idempotency_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    event.id,
+    input.projectId ?? null,
+    event.integration,
+    event.eventType,
+    event.status,
+    timestamp.getTime(),
+    JSON.stringify(event.payload),
+    event.error ? JSON.stringify(event.error) : null,
+    input.idempotencyKey ?? null
+  );
+
+  return event;
 }
 
+/** Looks up a previously created event by the same project + idempotency key, if any */
 export function findEventByIdempotencyKey(
   projectId: string,
   idempotencyKey: string
 ): IntegrationEvent | undefined {
-  return defaultStore.findByIdempotencyKey(projectId, idempotencyKey);
+  const row = db
+    .prepare('SELECT * FROM events WHERE project_id = ? AND idempotency_key = ?')
+    .get(projectId, idempotencyKey) as EventRow | undefined;
+  return row ? rowToEvent(row) : undefined;
 }
 
 export function getEvents(options?: GetEventsOptions): IntegrationEvent[] {
-  return defaultStore.getAll(options);
+  return getEventsPaginated(options).events;
 }
 
 export function getEventsPaginated(options?: GetEventsOptions): PaginatedEvents {
-  return defaultStore.getPaginated(options);
+  const { clause, params } = buildWhere(options);
+  const sortColumn = SORT_COLUMNS[options?.sortBy || 'timestamp'];
+  const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
+  // Clamp: a negative limit is LIMIT -1 in SQLite = the whole table; a huge
+  // one is a memory hazard. NaN/0/undefined fall back to the default.
+  const rawLimit = options?.limit;
+  const limit =
+    rawLimit && rawLimit > 0
+      ? Math.min(rawLimit, EVENT_STORE.MAX_PAGE_SIZE)
+      : EVENT_STORE.DEFAULT_PAGE_SIZE;
+  const offset = Math.max(0, options?.offset || 0);
+
+  const total = (
+    db.prepare(`SELECT COUNT(*) as count FROM events ${clause}`).get(...params) as {
+      count: number;
+    }
+  ).count;
+
+  // rowid as a tiebreaker preserves insertion order when the sort column ties
+  // (e.g. two events created in the same millisecond)
+  const rows = db
+    .prepare(
+      `SELECT * FROM events ${clause} ORDER BY ${sortColumn} ${sortOrder}, rowid ${sortOrder} LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset) as EventRow[];
+
+  return {
+    events: rows.map(rowToEvent),
+    total,
+    offset,
+    limit,
+    hasMore: offset + limit < total,
+  };
 }
 
 export function getEventById(id: string): IntegrationEvent | undefined {
-  return defaultStore.getById(id);
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow | undefined;
+  return row ? rowToEvent(row) : undefined;
 }
 
+/** Like getEventById, but only returns the event if it belongs to the given org's projects. */
 export function getEventByIdForOrg(id: string, orgId: string): IntegrationEvent | undefined {
-  return defaultStore.getByIdForOrg(id, orgId);
+  const row = db
+    .prepare(
+      'SELECT * FROM events WHERE id = ? AND project_id IN (SELECT id FROM projects WHERE org_id = ?)'
+    )
+    .get(id, orgId) as EventRow | undefined;
+  return row ? rowToEvent(row) : undefined;
 }
 
 export function updateEventClassification(
   id: string,
   classification: IntegrationEvent['classification']
 ): IntegrationEvent | undefined {
-  return defaultStore.updateClassification(id, classification);
-}
+  const existing = getEventById(id);
+  if (!existing) return undefined;
 
-export function getEventStats(integration: string, orgId?: string): EventStats {
-  return defaultStore.getStats(integration, orgId);
+  db.prepare('UPDATE events SET classification = ? WHERE id = ?').run(
+    classification ? JSON.stringify(classification) : null,
+    id
+  );
+
+  return { ...existing, classification };
 }
 
 export function getDistinctIntegrations(orgId?: string): string[] {
-  return defaultStore.getDistinctIntegrations(orgId);
+  const rows = (
+    orgId
+      ? db
+          .prepare(
+            'SELECT DISTINCT integration FROM events WHERE project_id IN (SELECT id FROM projects WHERE org_id = ?)'
+          )
+          .all(orgId)
+      : db.prepare('SELECT DISTINCT integration FROM events').all()
+  ) as { integration: string }[];
+  return rows.map((r) => r.integration);
+}
+
+export function getEventStats(integration: string, orgId?: string): EventStats {
+  const last24hTime = Date.now() - 24 * 60 * 60 * 1000;
+
+  const orgClause = orgId ? 'AND project_id IN (SELECT id FROM projects WHERE org_id = ?)' : '';
+  const orgParams = orgId ? [orgId] : [];
+
+  const row = db
+    .prepare(
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) as failures,
+         MAX(timestamp) as lastTimestamp
+       FROM events
+       WHERE integration = ? AND timestamp >= ? ${orgClause}`
+    )
+    .get(integration, last24hTime, ...orgParams) as {
+    total: number;
+    failures: number;
+    lastTimestamp: number | null;
+  };
+
+  const total = row.total;
+  const failures = row.failures || 0;
+  const successRate = total > 0 ? Math.round(((total - failures) / total) * 100) : 100;
+
+  return {
+    eventsLast24h: total,
+    errorsLast24h: failures,
+    successRate,
+    lastSync: row.lastTimestamp ? new Date(row.lastTimestamp) : null,
+  };
+}
+
+function setResolution(existing: IntegrationEvent, resolution: Resolution): IntegrationEvent {
+  db.prepare('UPDATE events SET resolution = ? WHERE id = ?').run(
+    JSON.stringify(resolution),
+    existing.id
+  );
+  return { ...existing, resolution };
 }
 
 export function acknowledgeEvent(
   id: string,
   acknowledgedBy: string = 'anonymous'
 ): IntegrationEvent | undefined {
-  return defaultStore.acknowledge(id, acknowledgedBy);
+  const existing = getEventById(id);
+  if (!existing || existing.status !== 'failure') return undefined;
+
+  return setResolution(existing, {
+    status: 'acknowledged',
+    acknowledgedAt: new Date(),
+    acknowledgedBy,
+  });
 }
 
 export function resolveEvent(
@@ -381,13 +305,25 @@ export function resolveEvent(
   resolvedBy: string = 'anonymous',
   notes?: string
 ): IntegrationEvent | undefined {
-  return defaultStore.resolve(id, resolvedBy, notes);
+  const existing = getEventById(id);
+  if (!existing || existing.status !== 'failure') return undefined;
+
+  return setResolution(existing, {
+    ...existing.resolution,
+    status: 'resolved',
+    resolvedAt: new Date(),
+    resolvedBy,
+    notes,
+  });
 }
 
 export function reopenEvent(id: string): IntegrationEvent | undefined {
-  return defaultStore.reopen(id);
+  const existing = getEventById(id);
+  if (!existing) return undefined;
+
+  return setResolution(existing, { status: 'open' });
 }
 
 export function clearEvents(): void {
-  defaultStore.clear();
+  db.prepare('DELETE FROM events').run();
 }

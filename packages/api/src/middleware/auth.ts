@@ -8,6 +8,12 @@ export function getSession(req: Request): SessionPayload | null {
   return verifySessionToken(req.cookies?.[SESSION_COOKIE]);
 }
 
+/** The caller's org id. Only valid after requireOrgMember - session + membership are assumed present. */
+export function getOrgId(req: Request): string {
+  const session = getSession(req)!;
+  return getMembershipForUser(session.userId)!.org.id;
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!getSession(req)) {
     res.status(401).json({ error: 'Sign-in required' });
