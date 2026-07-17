@@ -34,6 +34,13 @@ function App() {
     setSelectedEvent(updatedEvent);
   }, [updateEvent]);
 
+  // Joining/switching org changes which events are visible - refetch health data
+  // too, not just auth/org, so the dashboard doesn't show the old org's data.
+  const handleOrgChange = useCallback(() => {
+    refreshAuth();
+    refreshHealth();
+  }, [refreshAuth, refreshHealth]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -201,7 +208,7 @@ function App() {
             loggedIn={auth?.loggedIn ?? false}
             role={role}
             org={org}
-            onOrgChange={refreshAuth}
+            onOrgChange={handleOrgChange}
           />
         )}
       </main>

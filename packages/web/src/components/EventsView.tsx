@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { IntegrationEvent, ResolutionStatus } from '../types';
-import { fetchEventsPaginated } from '../api/client';
+import { fetchEventsPaginated, ApiError } from '../api/client';
 import type { SortField, SortOrder } from '../api/client';
 
 const statusColors: Record<string, string> = {
@@ -70,8 +70,16 @@ export function EventsView({ onEventClick }: EventsViewProps) {
       setEvents(result.events);
       setTotal(result.total);
       setError(null);
-    } catch {
-      setError('Failed to load events');
+    } catch (err) {
+      // Events are org-scoped - 401 (signed out) / 403 (no org) is a sign-in
+      // prompt, not an error.
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        setEvents([]);
+        setTotal(0);
+        setError('Sign in with GitHub to view your org’s events.');
+      } else {
+        setError('Failed to load events');
+      }
     } finally {
       setIsLoading(false);
     }

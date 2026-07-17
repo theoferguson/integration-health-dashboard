@@ -168,8 +168,14 @@ export class EventStore {
     const { clause, params } = buildWhere(options);
     const sortColumn = SORT_COLUMNS[options?.sortBy || 'timestamp'];
     const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const limit = options?.limit || EVENT_STORE.DEFAULT_PAGE_SIZE;
-    const offset = options?.offset || 0;
+    // Clamp: a negative limit is LIMIT -1 in SQLite = the whole table; a huge
+    // one is a memory hazard. NaN/0/undefined fall back to the default.
+    const rawLimit = options?.limit;
+    const limit =
+      rawLimit && rawLimit > 0
+        ? Math.min(rawLimit, EVENT_STORE.MAX_PAGE_SIZE)
+        : EVENT_STORE.DEFAULT_PAGE_SIZE;
+    const offset = Math.max(0, options?.offset || 0);
 
     const total = (
       db.prepare(`SELECT COUNT(*) as count FROM events ${clause}`).get(...params) as {

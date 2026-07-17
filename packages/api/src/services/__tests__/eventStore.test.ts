@@ -138,6 +138,17 @@ describe('eventStore', () => {
       expect(events).toHaveLength(5);
     });
 
+    it('clamps a negative limit to the default instead of dumping the whole table', () => {
+      for (let i = 0; i < 60; i++) {
+        createEvent({ integration: 'weather', eventType: `e-${i}`, status: 'success', payload: {} });
+      }
+
+      // -1 would become SQL "LIMIT -1" (unlimited) if not clamped.
+      const events = getEvents({ limit: -1 });
+
+      expect(events.length).toBe(50); // DEFAULT_PAGE_SIZE, not all 60
+    });
+
     it('should combine multiple filters', () => {
       createEvent({
         integration: 'weather',

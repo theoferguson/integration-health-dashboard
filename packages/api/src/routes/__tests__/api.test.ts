@@ -3,7 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../app.js';
 import { clearEvents, createEvent } from '../../services/eventStore.js';
 import { findOrCreateUser } from '../../services/userStore.js';
-import { createOrgForUser } from '../../services/orgStore.js';
+import { createOrgForUser, getMembershipForUser, joinOrgByCode } from '../../services/orgStore.js';
 import { createProject } from '../../services/projectStore.js';
 import { createSessionToken } from '../../services/authToken.js';
 import type { CreateEventInput } from '../../types/index.js';
@@ -457,6 +457,31 @@ describe('API Integration Tests', () => {
       const response = await authPost('/api/events/non-existent-id/reopen');
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('viewers cannot mutate events', () => {
+    it('rejects acknowledge/resolve/reopen/classify from a viewer with 403', async () => {
+      // A viewer in the same org as the beforeEach admin.
+      const org = getMembershipForUser(
+        findOrCreateUser(`api-test-user-${orgSeq - 1}`).id
+      )!.org;
+      const viewer = findOrCreateUser(`viewer-${orgSeq}`);
+      joinOrgByCode(viewer.id, org.inviteCode);
+      const viewerCookie = `ihd_session=${createSessionToken(viewer.id, viewer.githubLogin)}`;
+
+      const event = ev({ integration: 'weather', eventType: 'test', status: 'failure', payload: {} });
+
+      for (const action of ['acknowledge', 'resolve', 'reopen', 'classify']) {
+        const res = await request(app)
+          .post(`/api/events/${event.id}/${action}`)
+          .set('Cookie', viewerCookie);
+        expect(res.status).toBe(403);
+      }
+
+      // ...but the viewer can still read.
+      const read = await request(app).get(`/api/events/${event.id}`).set('Cookie', viewerCookie);
+      expect(read.status).toBe(200);
     });
   });
 });

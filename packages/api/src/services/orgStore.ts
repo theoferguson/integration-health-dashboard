@@ -82,11 +82,42 @@ export function regenerateInviteCode(orgId: string): string {
   return inviteCode;
 }
 
+/** Thrown by joinOrgByCode when leaving would leave an org with no admin. */
+export class StrandedOrgError extends Error {
+  constructor() {
+    super('would_strand_org');
+    this.name = 'StrandedOrgError';
+  }
+}
+
+/**
+ * True if this user leaving would strand an org: they're its sole admin and it
+ * still has other members or projects that would be left unmanaged (invisible,
+ * undeletable, still ingesting).
+ */
+function joinWouldStrandOrg(userId: string): boolean {
+  const row = db
+    .prepare(
+      `SELECT 1 FROM org_memberships m
+       WHERE m.user_id = ? AND m.role = 'admin'
+         AND NOT EXISTS (
+           SELECT 1 FROM org_memberships a
+           WHERE a.org_id = m.org_id AND a.user_id != m.user_id AND a.role = 'admin')
+         AND (
+           EXISTS (SELECT 1 FROM org_memberships o WHERE o.org_id = m.org_id AND o.user_id != m.user_id)
+           OR EXISTS (SELECT 1 FROM projects p WHERE p.org_id = m.org_id))
+       LIMIT 1`
+    )
+    .get(userId);
+  return !!row;
+}
+
 /**
  * Joins the org matching the invite code as a viewer, making it the user's
  * single active org (prior memberships are dropped). No-op join to an org the
- * user already belongs to just keeps their existing role.
- * ponytail: one org per user; abandoned auto-created personal orgs aren't
+ * user already belongs to just keeps their existing role. Throws StrandedOrgError
+ * if leaving would strand an org (sole admin of an org with members/projects).
+ * ponytail: one org per user; empty abandoned auto-created personal orgs aren't
  * garbage-collected. Add an org switcher + cleanup if multi-org is ever needed.
  */
 export function joinOrgByCode(userId: string, inviteCode: string): Org | null {
@@ -99,6 +130,8 @@ export function joinOrgByCode(userId: string, inviteCode: string): Org | null {
     .prepare('SELECT 1 FROM org_memberships WHERE user_id = ? AND org_id = ?')
     .get(userId, row.id);
   if (alreadyMember) return rowToOrg(row);
+
+  if (joinWouldStrandOrg(userId)) throw new StrandedOrgError();
 
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM org_memberships WHERE user_id = ?').run(userId);

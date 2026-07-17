@@ -43,6 +43,8 @@ export interface IHDClientOptions {
   fetchImpl?: typeof fetch;
   /** Max retry attempts on transient failures. Default 3. */
   maxRetries?: number;
+  /** Per-attempt timeout in ms - a stalled IHD aborts and retries. Default 10000. */
+  timeoutMs?: number;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -54,12 +56,14 @@ export class IHDClient {
   private readonly endpoint: string;
   private readonly fetchImpl: typeof fetch;
   private readonly maxRetries: number;
+  private readonly timeoutMs: number;
 
   constructor(options: IHDClientOptions) {
     this.apiKey = options.apiKey;
     this.endpoint = options.endpoint.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.maxRetries = options.maxRetries ?? 3;
+    this.timeoutMs = options.timeoutMs ?? 10000;
   }
 
   /**
@@ -92,11 +96,15 @@ export class IHDClient {
             Authorization: `Bearer ${this.apiKey}`,
           },
           body,
+          // Abort a stalled request; the throw drops into the retry path below.
+          signal: AbortSignal.timeout(this.timeoutMs),
         });
 
         if (response.ok) {
-          const data = (await response.json()) as { duplicate?: boolean };
-          return { ok: true, duplicate: data.duplicate };
+          // A 2xx is success even if the body is empty or unparseable - don't
+          // let a missing/garbled body turn an accepted event into a failure.
+          const data = await safeJson(response);
+          return { ok: true, duplicate: data?.duplicate };
         }
 
         // 4xx (bad request, bad api key) won't succeed on retry - fail fast
@@ -153,5 +161,14 @@ async function safeText(response: Response): Promise<string> {
     return await response.text();
   } catch {
     return '<unreadable response body>';
+  }
+}
+
+async function safeJson(response: Response): Promise<{ duplicate?: boolean } | null> {
+  try {
+    const text = await response.text();
+    return text ? (JSON.parse(text) as { duplicate?: boolean }) : null;
+  } catch {
+    return null;
   }
 }

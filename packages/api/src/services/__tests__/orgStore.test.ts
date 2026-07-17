@@ -4,8 +4,10 @@ import {
   getMembershipForUser,
   regenerateInviteCode,
   joinOrgByCode,
+  StrandedOrgError,
 } from '../orgStore.js';
 import { findOrCreateUser } from '../userStore.js';
+import { createProject } from '../projectStore.js';
 
 describe('orgStore', () => {
   it('createOrgForUser makes the user an admin of the new org', () => {
@@ -56,6 +58,30 @@ describe('orgStore', () => {
       expect(joinOrgByCode(user.id, 'not-a-real-code')).toBeNull();
       // membership unchanged
       expect(getMembershipForUser(user.id)?.role).toBe('admin');
+    });
+
+    it('refuses to join if it would strand the sole admin of an org with projects', () => {
+      const target = createOrgForUser(findOrCreateUser('strand-target').id, 'target org');
+
+      const owner = findOrCreateUser('strand-owner');
+      const own = createOrgForUser(owner.id, "strand-owner's org");
+      createProject('busy project', own.id); // org now has data to orphan
+
+      expect(() => joinOrgByCode(owner.id, target.inviteCode)).toThrow(StrandedOrgError);
+      // membership unchanged - still admin of their own org
+      expect(getMembershipForUser(owner.id)?.org.id).toBe(own.id);
+      expect(getMembershipForUser(owner.id)?.role).toBe('admin');
+    });
+
+    it('allows joining when the personal org is empty (nothing to strand)', () => {
+      const target = createOrgForUser(findOrCreateUser('empty-target').id, 'target org');
+
+      const joiner = findOrCreateUser('empty-joiner');
+      createOrgForUser(joiner.id, "empty-joiner's org"); // no projects, no other members
+
+      const joined = joinOrgByCode(joiner.id, target.inviteCode);
+      expect(joined?.id).toBe(target.id);
+      expect(getMembershipForUser(joiner.id)?.role).toBe('viewer');
     });
 
     it('is a no-op that preserves role when already a member', () => {

@@ -11,7 +11,7 @@ import {
 import type { SortField, SortOrder } from '../services/eventStore.js';
 import { classifyError } from '../services/classifier.js';
 import type { ResolutionStatus } from '../types/index.js';
-import { getSession, requireOrgMember } from '../middleware/auth.js';
+import { getSession, requireOrgMember, requireOrgAdmin } from '../middleware/auth.js';
 import { getMembershipForUser } from '../services/orgStore.js';
 
 const router = Router();
@@ -81,8 +81,9 @@ router.get('/:id', (req, res) => {
   res.json({ event });
 });
 
-// Classify an error event using AI
-router.post('/:id/classify', async (req, res) => {
+// Classify an error event using AI. Mutating routes are admin-only - viewers
+// are read-only, and classify spends real OpenAI budget.
+router.post('/:id/classify', requireOrgAdmin, async (req, res) => {
   const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {
@@ -110,7 +111,7 @@ router.post('/:id/classify', async (req, res) => {
 });
 
 // Acknowledge an error event
-router.post('/:id/acknowledge', (req, res) => {
+router.post('/:id/acknowledge', requireOrgAdmin, (req, res) => {
   const { acknowledged_by } = req.body;
   const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
@@ -127,7 +128,7 @@ router.post('/:id/acknowledge', (req, res) => {
 });
 
 // Resolve an error event
-router.post('/:id/resolve', (req, res) => {
+router.post('/:id/resolve', requireOrgAdmin, (req, res) => {
   const { resolved_by, notes } = req.body;
   const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
@@ -144,7 +145,7 @@ router.post('/:id/resolve', (req, res) => {
 });
 
 // Reopen a resolved/acknowledged event
-router.post('/:id/reopen', (req, res) => {
+router.post('/:id/reopen', requireOrgAdmin, (req, res) => {
   const event = getEventByIdForOrg(req.params.id, orgIdFor(req));
 
   if (!event) {

@@ -13,17 +13,24 @@ export interface SessionPayload {
 
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
-function getSecret(): string {
+function resolveSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    // Falling back to a known default in prod = anyone can forge an admin session.
+    throw new Error('SESSION_SECRET must be set in production');
+  }
   console.warn(
     '[auth] SESSION_SECRET is not set - using an insecure dev-only default. Set a real secret before deploying.'
   );
   return 'dev-only-insecure-secret-do-not-use-in-production';
 }
 
+// Resolved once at boot so an unset secret fails fast in prod, not per-request.
+const SECRET = resolveSecret();
+
 function sign(payload: string): string {
-  return createHmac('sha256', getSecret()).update(payload).digest('hex');
+  return createHmac('sha256', SECRET).update(payload).digest('hex');
 }
 
 export function createSessionToken(userId: string, login: string): string {

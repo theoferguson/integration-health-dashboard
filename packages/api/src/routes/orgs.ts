@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { getSession, requireAuth, requireOrgAdmin } from '../middleware/auth.js';
-import { getMembershipForUser, regenerateInviteCode, joinOrgByCode } from '../services/orgStore.js';
+import {
+  getMembershipForUser,
+  regenerateInviteCode,
+  joinOrgByCode,
+  StrandedOrgError,
+} from '../services/orgStore.js';
 
 const router = Router();
 
@@ -42,7 +47,19 @@ router.post('/join', (req, res) => {
     return;
   }
 
-  const org = joinOrgByCode(session.userId, code.trim());
+  let org;
+  try {
+    org = joinOrgByCode(session.userId, code.trim());
+  } catch (e) {
+    if (e instanceof StrandedOrgError) {
+      res.status(409).json({
+        error:
+          'You are the only admin of an org with members or projects. Add another admin or remove them before joining a different org.',
+      });
+      return;
+    }
+    throw e;
+  }
   if (!org) {
     res.status(404).json({ error: 'Invalid invite code' });
     return;
