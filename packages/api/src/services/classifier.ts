@@ -16,12 +16,12 @@ When analyzing errors, consider:
 3. Specific, actionable fixes an engineer can take right now
 
 Always respond in JSON format with these fields:
-- category: one of "auth", "rate_limit", "data_validation", "data_state_mismatch", "network", "spending_control", "compliance", "unknown"
+- category: one of "auth", "rate_limit", "data_validation", "data_state_mismatch", "network", "spending_control", "unknown"
 - severity: one of "low", "medium", "high", "critical"
 - cause: plain English explanation of what went wrong (2-3 sentences max)
 - suggestedFix: specific, actionable steps to resolve (2-4 steps)
 - affectedData: array of data types that may be affected
-- businessImpact: how this affects the contractor's operations (1 sentence)`;
+- businessImpact: how this affects operations relying on this integration's data (1 sentence)`;
 
 function buildUserPrompt(event: IntegrationEvent): string {
   return `Analyze this integration failure:

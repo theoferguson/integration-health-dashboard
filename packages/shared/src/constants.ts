@@ -45,7 +45,6 @@ export const CATEGORY_LABELS: Record<string, string> = {
   data_state_mismatch: 'Data State Mismatch',
   network: 'Network',
   spending_control: 'Spending Control',
-  compliance: 'Compliance',
   unknown: 'Unknown',
 } as const;
 

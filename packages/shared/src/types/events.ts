@@ -14,7 +14,6 @@ export type ErrorCategory =
   | 'data_state_mismatch'
   | 'network'
   | 'spending_control'
-  | 'compliance'
   | 'unknown';
 
 export interface Resolution {
