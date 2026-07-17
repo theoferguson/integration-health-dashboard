@@ -51,3 +51,10 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_events_idempotency
     ON events(project_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `);
+
+// CREATE TABLE IF NOT EXISTS is a no-op against a projects table that predates
+// the multi-tenant migration - backfill the column on existing deployments.
+const projectColumns = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
+if (!projectColumns.some((c) => c.name === 'user_id')) {
+  db.exec('ALTER TABLE projects ADD COLUMN user_id TEXT REFERENCES users(id)');
+}
