@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import routes from './routes/index.js';
@@ -13,6 +14,7 @@ export function createApp() {
   // Middleware
   app.use(cors());
   app.use(express.json());
+  app.use(cookieParser());
 
   // API routes
   app.use('/api', routes);

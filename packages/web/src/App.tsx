@@ -4,16 +4,17 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage } from './components';
-import { useHealthData } from './hooks';
+import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel } from './components';
+import { useHealthData, useAuth } from './hooks';
 import type { IntegrationEvent } from './types';
 
-type TabType = 'integrations' | 'events';
+type TabType = 'integrations' | 'events' | 'projects';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('integrations');
   const [filter, setFilter] = useState<'all' | 'failures'>('all');
   const [selectedEvent, setSelectedEvent] = useState<IntegrationEvent | null>(null);
+  const { auth, signOut } = useAuth();
 
   // Custom hooks for data management
   const {
@@ -65,6 +66,21 @@ function App() {
               >
                 Refresh
               </button>
+              {auth?.loggedIn ? (
+                <button
+                  onClick={signOut}
+                  className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Signed in as {auth.login} · Sign out
+                </button>
+              ) : (
+                <a
+                  href="/api/auth/login"
+                  className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800"
+                >
+                  Sign in with GitHub
+                </a>
+              )}
               <a
                 href="https://github.com/theoferguson/integration-health-dashboard"
                 target="_blank"
@@ -89,6 +105,12 @@ function App() {
               onClick={() => setActiveTab('events')}
             >
               All Events
+            </TabButton>
+            <TabButton
+              active={activeTab === 'projects'}
+              onClick={() => setActiveTab('projects')}
+            >
+              Projects
             </TabButton>
           </div>
         </div>
@@ -161,6 +183,8 @@ function App() {
         {activeTab === 'events' && (
           <EventsView onEventClick={setSelectedEvent} />
         )}
+
+        {activeTab === 'projects' && <ProjectsPanel loggedIn={auth?.loggedIn ?? false} />}
       </main>
 
       {/* Error Triage Modal */}

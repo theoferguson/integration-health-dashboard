@@ -372,6 +372,29 @@ Events flow into the dashboard, get AI-classified on demand, and can be triaged,
 
 ---
 
+## Accounts & Projects
+
+Sign-in is GitHub OAuth with **open signup** - anyone with a GitHub account
+can sign in and create their own projects. Each project is an API key scoped
+to whoever created it; the "Projects" tab lists (and lets you delete) only
+your own, never anyone else's. This is what makes IHD an actual multi-tenant
+platform rather than a single-operator tool - any project, yours or someone
+else's, can report in via `POST /api/ingest` once it has a key.
+
+The CLI script (`npm run create-project`) still works standalone for
+scripting/bootstrapping - it creates an ownerless project not tied to any
+account, which is fine for ingest (auth there is by API key, not by owner)
+but won't show up in anyone's "Projects" list.
+
+### Setting up the GitHub OAuth App
+
+One-time step on your own GitHub account:
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers) → **OAuth Apps** → **New OAuth App**.
+2. Homepage URL: `http://localhost:5173` for local dev, or your Fly app's URL in production.
+3. **Authorization callback URL**: `http://localhost:3001/api/auth/callback` locally, or `https://<your-app>.fly.dev/api/auth/callback` in production. GitHub requires an exact match - use two separate OAuth Apps (dev/prod) rather than switching one back and forth.
+4. Generate a client secret, then fill in `.env`: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `SESSION_SECRET` (see `.env.example` for how to generate it).
+
 ## Deployment
 
 ### Deploy to Fly.io
@@ -383,12 +406,21 @@ brew install flyctl
 # Login
 fly auth login
 
-# Deploy (first time)
-fly launch
+fly apps create integration-health-dashboard
+fly volumes create ihd_data --size 1 -a integration-health-dashboard --region sjc
 
-# Deploy (subsequent)
+# optional secrets
+fly secrets set OPENAI_API_KEY=... GITHUB_OAUTH_CLIENT_ID=... GITHUB_OAUTH_CLIENT_SECRET=... SESSION_SECRET=... -a integration-health-dashboard
+
+npm run build   # packages/web/dist must exist locally - the Dockerfile copies
+                # it rather than building it
 fly deploy
 ```
+
+The volume has to exist before the first deploy - `fly deploy` won't
+auto-create it from `fly.toml`'s `[[mounts]]` block. Without it, every
+restart/redeploy wipes all projects and events (Fly Machines don't persist
+local disk by default).
 
 ### Environment Variables
 
@@ -396,6 +428,9 @@ fly deploy
 |----------|-------------|----------|
 | `OPENAI_API_KEY` | OpenAI API key for AI classification | No (mock fallback) |
 | `PORT` | Server port | No (defaults to 3001 locally, 8080 in prod) |
+| `DB_PATH` | SQLite file path | No (defaults to `./data/ihd.db`; set to a mounted volume path in production) |
+| `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App credentials | Only for sign-in/project management |
+| `SESSION_SECRET` | Signs the session cookie | Only for sign-in (insecure dev default otherwise) |
 
 ---
 

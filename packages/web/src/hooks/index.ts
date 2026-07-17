@@ -4,3 +4,4 @@
  */
 
 export { useHealthData, type UseHealthDataResult, type ErrorStats } from './useHealthData';
+export { useAuth } from './useAuth';

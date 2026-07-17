@@ -200,3 +200,48 @@ export async function reopenEvent(
     method: 'POST',
   });
 }
+
+// ============ Auth APIs ============
+
+export interface AuthState {
+  loggedIn: boolean;
+  login: string | null;
+}
+
+export async function fetchAuthState(): Promise<AuthState> {
+  return apiCall(buildUrl('/auth/me'));
+}
+
+export async function logout(): Promise<void> {
+  await apiCall(`${API_BASE}/auth/logout`, { method: 'POST' });
+}
+
+// ============ Project APIs ============
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface CreatedProject extends ProjectSummary {
+  apiKey: string;
+}
+
+export async function fetchProjects(): Promise<ProjectSummary[]> {
+  const data = await apiCall<{ projects: ProjectSummary[] }>(buildUrl('/projects'));
+  return data.projects;
+}
+
+export async function createProjectRequest(name: string): Promise<CreatedProject> {
+  const data = await apiCall<{ project: CreatedProject }>(`${API_BASE}/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return data.project;
+}
+
+export async function deleteProjectRequest(id: string): Promise<void> {
+  await apiCall(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
+}

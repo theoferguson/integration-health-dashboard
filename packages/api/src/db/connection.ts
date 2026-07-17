@@ -17,10 +17,17 @@ export const db: Database.Database = new Database(resolveDbPath());
 db.pragma('journal_mode = WAL');
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    github_login TEXT UNIQUE NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     api_key TEXT UNIQUE NOT NULL,
+    user_id TEXT REFERENCES users(id),
     created_at INTEGER NOT NULL
   );
 
