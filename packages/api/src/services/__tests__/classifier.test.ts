@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { classifyError } from '../classifier.js';
 import type { IntegrationEvent } from '../../types/index.js';
 
@@ -25,10 +25,10 @@ function createFailureEvent(
 }
 
 describe('classifyError', () => {
-  describe('spending control errors', () => {
+  describe('spending/quota control errors', () => {
     it('should classify spending limit exceeded as spending_control', async () => {
       const event = createFailureEvent(
-        'stripe_issuing',
+        'nyc-civic-finance',
         'Authorization declined: spending_limit_exceeded',
         'card_declined'
       );
@@ -37,15 +37,11 @@ describe('classifyError', () => {
 
       expect(result.category).toBe('spending_control');
       expect(result.severity).toBe('high');
-      expect(result.suggestedFix).toContain('cardholder limits');
+      expect(result.suggestedFix).toContain('limit');
     });
 
-    it('should classify card declined as spending_control', async () => {
-      const event = createFailureEvent(
-        'stripe_issuing',
-        'Card declined at merchant',
-        'card_declined'
-      );
+    it('should classify declined as spending_control', async () => {
+      const event = createFailureEvent('nyc-civic-finance', 'Request declined by upstream', 'card_declined');
 
       const result = await classifyError(event);
 
@@ -56,7 +52,7 @@ describe('classifyError', () => {
   describe('auth errors', () => {
     it('should classify OAuth token expired as auth', async () => {
       const event = createFailureEvent(
-        'quickbooks',
+        'nyt-news',
         'OAuth token expired. Re-authentication required.',
         '401'
       );
@@ -69,7 +65,7 @@ describe('classifyError', () => {
     });
 
     it('should classify unauthorized as auth', async () => {
-      const event = createFailureEvent('procore', 'Unauthorized access', '401');
+      const event = createFailureEvent('weather', 'Unauthorized access', '401');
 
       const result = await classifyError(event);
 
@@ -77,50 +73,10 @@ describe('classifyError', () => {
     });
   });
 
-  describe('compliance errors', () => {
-    it('should classify prevailing wage issues as compliance', async () => {
-      const event = createFailureEvent(
-        'certified_payroll',
-        'Prevailing wage rate not configured for classification: Electrician',
-        'MISSING_WAGE_RATE'
-      );
-
-      const result = await classifyError(event);
-
-      expect(result.category).toBe('compliance');
-      expect(result.severity).toBe('critical');
-      expect(result.businessImpact).toContain('regulatory');
-    });
-
-    it('should classify apprentice data issues as compliance', async () => {
-      const event = createFailureEvent(
-        'certified_payroll',
-        'Missing apprentice registration number',
-        'INCOMPLETE_DATA'
-      );
-
-      const result = await classifyError(event);
-
-      expect(result.category).toBe('compliance');
-    });
-
-    it('should classify fringe benefit errors as compliance', async () => {
-      const event = createFailureEvent(
-        'certified_payroll',
-        'Fringe benefit calculation mismatch',
-        'CALCULATION_ERROR'
-      );
-
-      const result = await classifyError(event);
-
-      expect(result.category).toBe('compliance');
-    });
-  });
-
   describe('rate limit errors', () => {
     it('should classify rate limit exceeded as rate_limit', async () => {
       const event = createFailureEvent(
-        'gusto',
+        'nyt-news',
         'Rate limit exceeded. Too many requests.',
         '429'
       );
@@ -133,7 +89,7 @@ describe('classifyError', () => {
     });
 
     it('should classify 429 status code as rate_limit', async () => {
-      const event = createFailureEvent('gusto', 'Too many requests', '429');
+      const event = createFailureEvent('nyt-news', 'Too many requests', '429');
 
       const result = await classifyError(event);
 
@@ -144,8 +100,8 @@ describe('classifyError', () => {
   describe('data validation errors', () => {
     it('should classify validation failures as data_validation', async () => {
       const event = createFailureEvent(
-        'gusto',
-        'Validation failed: employee_id is required but was null',
+        'nyt-books',
+        'Validation failed: list_name is required but was null',
         '400'
       );
 
@@ -156,11 +112,7 @@ describe('classifyError', () => {
     });
 
     it('should classify missing required fields as data_validation', async () => {
-      const event = createFailureEvent(
-        'gusto',
-        'Missing required field: ssn',
-        '400'
-      );
+      const event = createFailureEvent('nyt-books', 'Missing required field: isbn', '400');
 
       const result = await classifyError(event);
 
@@ -171,8 +123,8 @@ describe('classifyError', () => {
   describe('data state mismatch errors', () => {
     it('should classify archived entities as data_state_mismatch', async () => {
       const event = createFailureEvent(
-        'procore',
-        'Entity not found: Project #12847 has been archived in Procore',
+        'weather',
+        'Entity not found: zone NYZ072 has been archived upstream',
         '404'
       );
 
@@ -184,8 +136,8 @@ describe('classifyError', () => {
 
     it('should classify mapping failures as data_state_mismatch', async () => {
       const event = createFailureEvent(
-        'quickbooks',
-        'GL Account mapping failed: Account not found',
+        'nyc-civic-finance',
+        'Candidate mapping failed: record not found',
         'ENTITY_NOT_FOUND'
       );
 
@@ -198,7 +150,7 @@ describe('classifyError', () => {
   describe('unknown errors', () => {
     it('should classify unrecognized errors as unknown', async () => {
       const event = createFailureEvent(
-        'procore',
+        'weather',
         'An unexpected internal server error occurred',
         '500'
       );
@@ -214,7 +166,7 @@ describe('classifyError', () => {
     it('should throw error for success events', async () => {
       const event: IntegrationEvent = {
         id: 'test-id',
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test.event',
         status: 'success',
         timestamp: new Date(),
@@ -229,7 +181,7 @@ describe('classifyError', () => {
     it('should throw error for events without error object', async () => {
       const event: IntegrationEvent = {
         id: 'test-id',
-        integration: 'procore',
+        integration: 'weather',
         eventType: 'test.event',
         status: 'failure',
         timestamp: new Date(),
@@ -245,11 +197,7 @@ describe('classifyError', () => {
 
   describe('classification structure', () => {
     it('should return all required fields', async () => {
-      const event = createFailureEvent(
-        'stripe_issuing',
-        'Authorization declined',
-        'card_declined'
-      );
+      const event = createFailureEvent('nyc-civic-finance', 'Authorization declined', 'card_declined');
 
       const result = await classifyError(event);
 
@@ -262,11 +210,7 @@ describe('classifyError', () => {
     });
 
     it('should return severity as one of valid values', async () => {
-      const event = createFailureEvent(
-        'gusto',
-        'Rate limit exceeded',
-        '429'
-      );
+      const event = createFailureEvent('nyt-news', 'Rate limit exceeded', '429');
 
       const result = await classifyError(event);
 

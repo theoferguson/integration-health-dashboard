@@ -6,20 +6,14 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
-const SYSTEM_PROMPT = `You are an integration support engineer for a construction contractor software platform (similar to Miter).
+const SYSTEM_PROMPT = `You are an on-call engineer triaging integration failures for a monitoring platform. Projects report events for arbitrary third-party integrations - public APIs, webhooks, scheduled data syncs - and you help explain what went wrong and what to do about it.
 
-Your job is to analyze integration failures and provide actionable insights. The platform integrates with:
-- Procore (project management - jobs, cost codes, daily logs)
-- Gusto (payroll - employee data, timecards, payroll runs)
-- QuickBooks (accounting - job costs, invoices, GL entries)
-- Stripe Issuing (payments - virtual cards for field purchases)
-- Certified Payroll systems (compliance - LCPtracker, WH-347, prevailing wage)
+You won't always recognize the specific integration being reported. Reason from the error message, error code, event type, and payload/context provided rather than assuming what the integration is used for.
 
 When analyzing errors, consider:
-1. Common failure patterns for each integration
-2. Impact on construction workflows (job costing, payroll, field operations)
-3. Urgency based on payroll deadlines, job schedules, or compliance requirements
-4. Specific, actionable fixes that a support engineer or contractor admin can take
+1. Common failure patterns across integrations: expired or invalid credentials, rate limiting, malformed or unexpected response data, stale or missing referenced records, network/timeout issues, and quota or policy limits enforced by the external system
+2. Urgency: is this a one-off blip likely to self-resolve, or does it indicate the integration is down and data has stopped flowing?
+3. Specific, actionable fixes an engineer can take right now
 
 Always respond in JSON format with these fields:
 - category: one of "auth", "rate_limit", "data_validation", "data_state_mismatch", "network", "spending_control", "compliance", "unknown"
@@ -87,7 +81,7 @@ function getMockClassification(event: IntegrationEvent): ErrorClassification {
   const errorMessage = event.error?.message?.toLowerCase() || '';
   const errorCode = event.error?.code?.toLowerCase() || '';
 
-  // Spending control (Stripe specific) - check first as "declined" is common
+  // Spending/quota controls - check first as "declined" is a common generic phrase
   if (
     errorMessage.includes('spending') ||
     errorMessage.includes('spending_limit') ||
@@ -98,12 +92,12 @@ function getMockClassification(event: IntegrationEvent): ErrorClassification {
       category: 'spending_control',
       severity: 'high',
       cause:
-        'Card transaction was declined due to spending controls or insufficient funds.',
+        'A spend or quota limit enforced by the external system blocked this action.',
       suggestedFix:
-        'Review the cardholder limits in Stripe. If legitimate, temporarily increase the limit or use an alternative payment method.',
-      affectedData: ['card_transaction'],
+        'Review the configured limit for this integration. If legitimate, raise the limit or use an alternative path for this action.',
+      affectedData: ['transaction'],
       businessImpact:
-        'Field worker may be unable to purchase materials, potentially delaying job progress.',
+        'The attempted action did not complete and may need manual review.',
     };
   }
 
@@ -118,34 +112,12 @@ function getMockClassification(event: IntegrationEvent): ErrorClassification {
     return {
       category: 'auth',
       severity: 'high',
-      cause: `Authentication failed for ${event.integration}. The access token may have expired or been revoked.`,
+      cause: `Authentication failed for ${event.integration}. The credentials or access token may have expired or been revoked.`,
       suggestedFix:
-        'Re-authenticate the integration by going to Settings > Integrations and clicking "Reconnect" for this service.',
+        'Re-authenticate or rotate the credentials for this integration, then retry.',
       affectedData: ['all sync operations'],
       businessImpact:
-        'No data will sync until the connection is restored, potentially affecting payroll and job costing.',
-    };
-  }
-
-  // Compliance errors (certified payroll specific) - check before rate_limit due to "wage rate"
-  if (
-    errorMessage.includes('prevailing wage') ||
-    errorMessage.includes('wage rate') ||
-    errorMessage.includes('apprentice') ||
-    errorMessage.includes('fringe') ||
-    errorMessage.includes('wh-347') ||
-    errorMessage.includes('lcptracker') ||
-    errorMessage.includes('certified payroll')
-  ) {
-    return {
-      category: 'compliance',
-      severity: 'critical',
-      cause: `Certified payroll compliance check failed. Required wage or worker data is missing or incorrect.`,
-      suggestedFix:
-        'Review the affected worker classifications and wage rates. Ensure all required fields (apprentice info, prevailing wage rates, fringe benefits) are configured before the submission deadline.',
-      affectedData: ['certified_payroll_report', 'worker_classifications'],
-      businessImpact:
-        'Compliance reports cannot be submitted until resolved, risking regulatory penalties and payment delays.',
+        'No data will sync from this integration until the connection is restored.',
     };
   }
 
