@@ -1,17 +1,17 @@
-# @theo/ihd-sdk
+# @theof/ihd-sdk
 
 Client SDK for reporting integration events to [Integration Health Dashboard](https://github.com/theoferguson/integration-health-dashboard).
 
 ## Install
 
 ```bash
-npm install @theo/ihd-sdk
+npm install @theof/ihd-sdk
 ```
 
 ## Usage
 
 ```ts
-import { IHDClient } from '@theo/ihd-sdk'
+import { IHDClient } from '@theof/ihd-sdk'
 
 const monitor = new IHDClient({
   apiKey: process.env.IHD_API_KEY!,      // from `npm run create-project` in the IHD repo

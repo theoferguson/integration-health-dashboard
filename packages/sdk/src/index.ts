@@ -1,5 +1,5 @@
 /**
- * @theo/ihd-sdk
+ * @theof/ihd-sdk
  * Client for reporting integration events to Integration Health Dashboard.
  *
  * This package owns its own wire types rather than importing IHD's internal

@@ -278,13 +278,13 @@ The existing construction-specific webhook routes (`/api/webhooks/procore`, etc.
 **Goal:** A small npm package developers drop into their applications to start sending events to the dashboard.
 
 ```bash
-npm install @theo/ihd-sdk
+npm install @theof/ihd-sdk
 ```
 
 #### Node.js / Express
 
 ```ts
-import { IHDClient } from '@theo/ihd-sdk'
+import { IHDClient } from '@theof/ihd-sdk'
 
 const monitor = new IHDClient({
   apiKey: process.env.IHD_API_KEY,
@@ -310,7 +310,7 @@ try {
 #### React
 
 ```tsx
-import { IHDErrorBoundary } from '@theo/ihd-sdk/react'
+import { IHDErrorBoundary } from '@theof/ihd-sdk/react'
 
 // Wraps your app — captures unhandled React errors
 <IHDErrorBoundary client={monitor}>
@@ -360,7 +360,7 @@ import { IHDErrorBoundary } from '@theo/ihd-sdk/react'
 Once complete, any project can be instrumented in under 5 minutes:
 
 ```bash
-npm install @theo/ihd-sdk
+npm install @theof/ihd-sdk
 ```
 
 ```ts

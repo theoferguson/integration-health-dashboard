@@ -1,5 +1,5 @@
 {
-  "name": "@theo/ihd-sdk",
+  "name": "@theof/ihd-sdk",
   "version": "0.1.0",
   "description": "Client SDK for reporting integration events to Integration Health Dashboard",
   "license": "MIT",
