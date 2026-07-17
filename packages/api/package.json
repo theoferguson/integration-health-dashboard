@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "create-project": "tsx src/scripts/createProject.ts"
   },
   "dependencies": {
     "@ihd/shared": "*",

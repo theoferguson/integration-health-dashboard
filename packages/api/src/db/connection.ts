@@ -17,8 +17,16 @@ export const db: Database.Database = new Database(resolveDbPath());
 db.pragma('journal_mode = WAL');
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    api_key TEXT UNIQUE NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id),
     integration TEXT NOT NULL,
     event_type TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -26,10 +34,13 @@ db.exec(`
     payload TEXT NOT NULL,
     error TEXT,
     classification TEXT,
-    resolution TEXT
+    resolution TEXT,
+    idempotency_key TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_events_integration ON events(integration);
   CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_events_idempotency
+    ON events(project_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `);

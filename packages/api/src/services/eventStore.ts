@@ -45,6 +45,7 @@ export interface EventStats {
 
 interface EventRow {
   id: string;
+  project_id: string | null;
   integration: string;
   event_type: string;
   status: string;
@@ -128,19 +129,29 @@ export class EventStore {
     };
 
     db.prepare(
-      `INSERT INTO events (id, integration, event_type, status, timestamp, payload, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO events (id, project_id, integration, event_type, status, timestamp, payload, error, idempotency_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       event.id,
+      input.projectId ?? null,
       event.integration,
       event.eventType,
       event.status,
       timestamp.getTime(),
       JSON.stringify(event.payload),
-      event.error ? JSON.stringify(event.error) : null
+      event.error ? JSON.stringify(event.error) : null,
+      input.idempotencyKey ?? null
     );
 
     return event;
+  }
+
+  /** Looks up a previously created event by the same project + idempotency key, if any */
+  findByIdempotencyKey(projectId: string, idempotencyKey: string): IntegrationEvent | undefined {
+    const row = db
+      .prepare('SELECT * FROM events WHERE project_id = ? AND idempotency_key = ?')
+      .get(projectId, idempotencyKey) as EventRow | undefined;
+    return row ? rowToEvent(row) : undefined;
   }
 
   getAll(options?: GetEventsOptions): IntegrationEvent[] {
@@ -287,6 +298,13 @@ const defaultStore = new EventStore();
 
 export function createEvent(input: CreateEventInput): IntegrationEvent {
   return defaultStore.create(input);
+}
+
+export function findEventByIdempotencyKey(
+  projectId: string,
+  idempotencyKey: string
+): IntegrationEvent | undefined {
+  return defaultStore.findByIdempotencyKey(projectId, idempotencyKey);
 }
 
 export function getEvents(options?: GetEventsOptions): IntegrationEvent[] {

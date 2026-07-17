@@ -59,6 +59,10 @@ export interface CreateEventInput {
   status: EventStatus;
   payload: Record<string, unknown>;
   error?: EventError;
+  /** Which project reported this event, if it came through /api/ingest */
+  projectId?: string;
+  /** Dedupes retried sends of the same logical event from a project's client */
+  idempotencyKey?: string;
 }
 
 export interface HealthOverview {
