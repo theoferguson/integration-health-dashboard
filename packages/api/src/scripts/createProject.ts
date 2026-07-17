@@ -3,6 +3,7 @@
  * Prints the project id and API key. The key is only ever shown here -
  * it's not retrievable later, so save it now.
  */
+import '../loadEnv.js';
 import { createProject } from '../services/projectStore.js';
 
 const nameFlagIndex = process.argv.indexOf('--name');
