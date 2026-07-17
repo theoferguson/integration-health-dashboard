@@ -2,7 +2,7 @@
 
 An AI-native monitoring tool for third-party integrations, built to demonstrate full-stack TypeScript development, AI-assisted error classification, and construction-domain awareness.
 
-**[Live Demo](https://integration-health-dashboard.fly.dev)** | **[View Blueprint](./docs/blueprint.md)**
+**[View Blueprint](./docs/blueprint.md)**
 
 ## Problem
 
