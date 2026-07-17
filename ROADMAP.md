@@ -11,41 +11,54 @@ Full report (2026-07-17, private artifact):
 https://claude.ai/code/artifact/6ea6dab0-5b06-46ec-be12-3a305de34cd6
 
 A two-repo review with extra scrutiny on the org-scoped multi-tenancy work.
-One finding — the NYT API key leaking into IHD event payloads and logs — was
-fixed and deployed (`integrations-host-app` commit `569c01c`). Everything
-else is open, triage in roughly this order:
+Most findings are now fixed (2026-07-17, IHD `042514c`/`4e30e10`,
+host-app `dfb33f4`; NYT key leak earlier in host-app `569c01c`). Remaining
+open items are at the bottom.
 
-**Security / integrity (start here — two are in freshly-shipped org code):**
-- IHD: viewers can mutate events (acknowledge / resolve / reopen / classify) —
-  event routes use `requireOrgMember`, not `requireOrgAdmin`; `classify` also
-  spends real OpenAI budget. `packages/api/src/routes/events.ts:20`
-- IHD: `joinOrgByCode` can strand an org's sole admin and orphan its projects
-  (invisible, undeletable, still ingesting). `services/orgStore.ts:103`
-- Both apps: forgeable admin session if `SESSION_SECRET` is unset in prod —
-  currently latent (secrets are set), but should throw on boot instead of
-  falling back to a hardcoded default. `services/authToken.ts`
+**Security / integrity — DONE:**
+- [x] IHD: event mutation routes (classify/acknowledge/resolve/reopen) now
+  require `requireOrgAdmin`, not just membership. `routes/events.ts`
+- [x] IHD: `joinOrgByCode` refuses to strand a sole admin of an org with
+  members/projects (409). `services/orgStore.ts`
+- [x] Both apps: `SESSION_SECRET` resolved once at boot, throws in prod if
+  unset instead of a forgeable default. `services/authToken.ts`
 
-**Reliability (hangs / crashes):**
-- No fetch timeout anywhere — SDK `report()` and host adapters can hang forever
-  on a stalled upstream. Add `AbortSignal.timeout`, treat abort as retryable.
-- Host app: `useAuth` has no error handling → one failed `/api/auth/me` bricks
-  the whole UI on a permanent spinner. Add try/catch + signed-out fallback.
-- Host app: no error boundary + unguarded `snapshot.data` destructure → a
-  partial payload white-screens the app. Add a boundary; default arrays.
-- Host app scheduler: no in-flight guard → overlapping runs of the same adapter.
-- SDK: a 2xx with an empty body is reported as a failure (`.json()` throws).
+**Reliability — DONE:**
+- [x] Fetch timeouts: SDK `report()` (`AbortSignal.timeout`, retryable) and
+  host `fetchJson` (shared root for all adapters).
+- [x] Host `useAuth`: signed-out fallback on a failed `/api/auth/me`.
+- [x] Host: `ErrorBoundary` around tab content (partial payload no longer
+  white-screens). `components/ErrorBoundary.tsx`
+- [x] Host scheduler: in-flight guard against overlapping adapter runs.
+- [x] SDK: a 2xx with an empty/unparseable body is no longer a false failure.
 
-**Correctness / UX:** civic-finance `NaN` total from one bad row; civic table vs
-chart timezone off-by-one; stale dashboard data after an org switch; negative
-`limit` dumps the whole event table; admin refresh throttle skips failing
-integrations; 401/403 sign-in handling missing on non-Integrations tabs; a few
-smaller items. See report.
+**Correctness / UX — DONE:**
+- [x] civic-finance `NaN` total (coerce non-numeric amounts to 0).
+- [x] civic table vs chart timezone off-by-one (format both from the string).
+- [x] stale dashboard data after an org switch (refetch health on org change).
+- [x] negative `limit` dumped the whole event table (clamp to [1, MAX]).
+- [x] admin refresh throttle now keyed on last attempt, not just a snapshot,
+  so failing integrations are throttled too.
+- [x] 401/403 handled as a sign-in prompt on the All Events tab.
 
-**Simplifications (delete):** the `EventStore` class (one instance + 13
-forwarding wrappers), dead `services/index.ts`, dead host `scripts/refresh.ts`
-(source of the 2 failing `dist/` tests), duplicated `orgIdFor`, the unused
-host-web `ApiError` taxonomy, dev deps shipped to the prod Docker image, and
-the web bundle being built outside Docker. See report.
+**Simplifications — DONE:** dropped the `EventStore` class + 13 forwarding
+wrappers (plain functions now), deleted dead `services/index.ts`, hoisted the
+duplicated `orgIdFor` into `middleware/auth.getOrgId`.
+
+**Simplifications — decided against / N/A:**
+- Host `scripts/refresh.ts` is NOT dead — it's wired to `npm run refresh` and
+  cited in UI empty-states. The "2 failing dist tests" don't reproduce:
+  vitest 4 excludes `dist/**` by default. No change.
+- Host-web `ApiError` taxonomy kept — the `.status` field is genuinely useful
+  (IHD web now uses it for 401/403 handling); deleting 3 fields isn't worth it.
+
+**Still open (deferred — deploy-sensitive, need a real `fly deploy` to verify):**
+- Prod Docker image copies the full `node_modules` (dev deps included). Split a
+  prod-only deps stage (`npm install --omit=dev`).
+- Web bundle is built locally before `fly deploy` (stale-bundle footgun). Move
+  the `@ihd/web` build into the Dockerfile builder stage.
+  Do these two together as one focused change with a local `docker build` +
+  boot check before deploying.
 
 ---
 
