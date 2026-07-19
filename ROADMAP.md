@@ -125,12 +125,17 @@ compatible (v1 reporters still work; old event rows keep v4 ids).
 - Publish SDK `0.2.0` when ready; the host app only needs the bump once we wire
   its adapters to actually emit dimensions (below).
 
-**Follow-ons (not done):**
-- Wire the host adapters to emit real dimensions — `metrics.latencyMs` (time the
-  fetch), `source` (`iha@<version>`), `environment`, `itemCount`. Needs SDK
-  0.2.0 + host redeploy.
-- Web: a real metric trend chart (e.g. latency over time) now that metrics exist.
-- These make #2's monitor graphs actually interesting.
+**Follow-ons — DONE (2026-07-19, host `73361e9`, IHD web `c1c0a43`):**
+- [x] Host adapters emit `metrics.latencyMs` + `metrics.itemCount`, `source`
+  (`integrations-host-app@0.1.0`), `environment` (NODE_ENV) on every refresh.
+- [x] IHD web: latency trend sparkline per integration card (metrics.latencyMs).
+
+**Deploy ordering (must be in this order):**
+1. Deploy IHD #3 (accepts schemaVersion 1 **and** 2) — the live IHD still
+   rejects v2.
+2. Publish `@theof/ihd-sdk` 0.2.0, then `npm install` in the host (reconciles
+   the lockfile, still at 0.1.1 in the commit).
+3. Deploy the host (now emits v2). Latency sparklines fill in once events flow.
 
 Original scope notes:
 
