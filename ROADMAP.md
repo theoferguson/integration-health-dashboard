@@ -101,9 +101,15 @@ Rough shape:
 - Depends on #3 — richer, more structured event data makes monitor predicates
   far more useful (numeric thresholds, tags, latency, etc.).
 
-Open questions: notification channel (in-app only vs email/webhook), whether
-monitors evaluate per-event or over a window (rate/threshold), and how firing
-state clears.
+**Decided (2026-07-19):** a monitor is a Datadog-style **graph of the events
+matching its configuration**, not a per-event alerter — the graph is derived
+from the events table, no stored "firings" required. Notifications are **in-app
+only** for v1 (a thin optional alert layer). Depends on #3 (**confirmed: do #3
+first**). Event-level dedupe (UUIDv7 ids + idempotency) means the graph counts
+distinct real events. See `docs/DESIGN-monitors-and-event-data.md` Part B.
+
+Still open: exact alert-trigger semantics (threshold/window vs "any new match")
+— settle when building #2, doesn't block #3.
 
 ---
 
@@ -119,8 +125,16 @@ the dashboard and monitors (#2) have more to work with. Candidates:
 - **Severity** as a first-class field (not only derived from AI classification).
 - A **source** identifier (host / adapter version).
 
+Also (decided 2026-07-19): switch event `id`s from random **UUIDv4 to UUIDv7**
+(time-sortable, still unique) — cleaner ordering/pagination and a distinct id
+per real event. Keep the `idempotency_key` retry-dedupe (a retried send stays
+one row; we are NOT making every POST unique). This is the "best-practice event
+ID system" that underpins the Monitor graphs in #2.
+
 Keep the SDK's wire format versioned (`schemaVersion`) and backward compatible;
 new fields should be optional so existing reporters keep working.
+
+**Confirmed: #3 is the next build**, ahead of #2.
 
 ---
 

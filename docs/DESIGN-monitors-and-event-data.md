@@ -28,6 +28,24 @@ Guiding constraints (unchanged from the rest of the app):
 
 `ErrorSeverity` already exists in `shared/types/events.ts` — reuse it.
 
+### Event IDs → UUIDv7 (decided)
+
+Switch server-generated event `id`s from random **UUIDv4** to **UUIDv7** (RFC
+9562) — timestamp-ordered, still globally unique. Why: every stored event is a
+distinct, uniquely-identified occurrence, and IDs now sort by creation time
+(cleaner cursor pagination and a natural tiebreaker instead of the current
+`rowid` tiebreak). Backward compatible — existing UUIDv4 rows keep their ids;
+only new inserts use v7. No wire change (the client never sends the row `id`).
+
+Dedupe stays layered and unchanged in spirit:
+- **Ingest / retries**: keep the `idempotency_key` unique index. A retried
+  send (SDK timeout/retry) still collapses to one row — we are NOT making every
+  POST a new event. So "each event is unique" = each *real* occurrence is one
+  uniquely-ID'd row; network retries don't inflate it.
+- **Monitors**: because events are already distinct + uniquely ID'd, a monitor
+  graphing matching events counts real occurrences with no double-counting.
+  That's what the UUIDv7 + idempotency combo buys the Monitor feature (#2).
+
 ### Wire contract — `schemaVersion: 2`
 
 Bump to 2, but **keep accepting 1**. A v1 body is a v2 body with all new fields
@@ -94,9 +112,24 @@ hot metric if it matters.`
 
 ## Part B — Monitors (#2)
 
-A **monitor** is an org-scoped saved rule that watches for events matching a
-spec and records a **firing** each time one does. The IHD analogue of a
-Datadog/Sentry alert.
+**Reframed per product intent (decided):** a monitor is the Datadog sense — an
+org-scoped **saved event query rendered as a time-series graph** of whatever
+events match its configuration, *not* a per-event "fires once" alerter. The
+match spec is the filter; the graph is the primary artifact.
+
+- **Graph** = query matching events bucketed over time
+  (`SELECT count(*) / avg(metric) FROM events WHERE <match_spec> GROUP BY bucket`).
+  No stored "firings" needed for the graph — it's derived from the events table
+  (reuse the events `buildWhere`). Dedupe is already handled upstream: UUIDv7 +
+  idempotency mean each point counts distinct real events, no double-counting.
+- **Notifications** (decided: **in-app only** for v1) are a thin optional layer
+  on top — a monitor can have an alert condition (e.g. threshold over a window,
+  or "any new matching failure") that raises an in-app notification. Exact
+  trigger semantics are settled when we build #2; they don't block #3.
+
+The `monitor_firings` table below is therefore **optional / alerting-only** — an
+audit log of notifications, not the source of the graph. Skip it in a
+graph-only v1.
 
 ### Data model
 
