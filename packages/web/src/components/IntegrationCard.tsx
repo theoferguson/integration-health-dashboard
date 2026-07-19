@@ -1,8 +1,11 @@
 import type { Integration } from '../types';
+import { Sparkline } from './Sparkline';
 
 interface IntegrationCardProps {
   integration: Integration;
   onClick?: () => void;
+  /** Recent refresh latencies (ms), oldest→newest, for a trend sparkline. */
+  latencies?: number[];
 }
 
 const statusColors = {
@@ -17,10 +20,11 @@ const statusDots = {
   down: 'bg-red-500',
 };
 
-export function IntegrationCard({ integration, onClick }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onClick, latencies }: IntegrationCardProps) {
   const timeAgo = integration.lastSync
     ? formatTimeAgo(new Date(integration.lastSync))
     : 'Never';
+  const latestLatency = latencies && latencies.length > 0 ? latencies[latencies.length - 1] : null;
 
   return (
     <div
@@ -53,6 +57,16 @@ export function IntegrationCard({ integration, onClick }: IntegrationCardProps) 
           <div className="font-medium">{timeAgo}</div>
         </div>
       </div>
+
+      {latestLatency !== null && (
+        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20 flex items-end justify-between">
+          <div>
+            <div className="opacity-60 text-xs">Latency</div>
+            <div className="font-medium text-xs sm:text-sm">{Math.round(latestLatency)} ms</div>
+          </div>
+          {latencies && <Sparkline values={latencies} />}
+        </div>
+      )}
 
       {integration.errorsLast24h > 0 && (
         <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20">

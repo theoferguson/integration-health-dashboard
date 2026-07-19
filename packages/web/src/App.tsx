@@ -3,7 +3,7 @@
  * Main application component
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel } from './components';
 import { useHealthData, useAuth } from './hooks';
 import type { IntegrationEvent } from './types';
@@ -27,6 +27,17 @@ function App() {
     refresh: refreshHealth,
     updateEvent,
   } = useHealthData({ filter });
+
+  // Per-integration refresh-latency series (oldest→newest) from recent events'
+  // metrics, for the trend sparkline on each card. Events arrive newest-first.
+  const latencyByIntegration = useMemo(() => {
+    const map: Record<string, number[]> = {};
+    for (const ev of [...events].reverse()) {
+      const ms = ev.metrics?.latencyMs;
+      if (typeof ms === 'number') (map[ev.integration] ??= []).push(ms);
+    }
+    return map;
+  }, [events]);
 
   // Handle event updates from triage modal
   const handleEventUpdated = useCallback((updatedEvent: IntegrationEvent) => {
@@ -165,7 +176,11 @@ function App() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   {integrations.map((integration) => (
-                    <IntegrationCard key={integration.id} integration={integration} />
+                    <IntegrationCard
+                      key={integration.id}
+                      integration={integration}
+                      latencies={latencyByIntegration[integration.id]}
+                    />
                   ))}
                 </div>
               )}
