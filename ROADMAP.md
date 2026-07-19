@@ -113,7 +113,26 @@ Still open: exact alert-trigger semantics (threshold/window vs "any new match")
 
 ---
 
-## 3. Expand the data collected in events
+## 3. Expand the data collected in events — ✅ IMPLEMENTED (2026-07-19, `d726aff`)
+
+Platform capability shipped: schemaVersion 2 with optional `metrics`, `tags`,
+`environment`, `severity`, `source`; UUIDv7 event ids; SDK 0.2.0. Backward
+compatible (v1 reporters still work; old event rows keep v4 ids).
+
+**Deploy / publish:**
+- IHD deploy picks up the columns + validation + UUIDv7 (safe: existing DB
+  gets the columns ALTERed on boot).
+- Publish SDK `0.2.0` when ready; the host app only needs the bump once we wire
+  its adapters to actually emit dimensions (below).
+
+**Follow-ons (not done):**
+- Wire the host adapters to emit real dimensions — `metrics.latencyMs` (time the
+  fetch), `source` (`iha@<version>`), `environment`, `itemCount`. Needs SDK
+  0.2.0 + host redeploy.
+- Web: a real metric trend chart (e.g. latency over time) now that metrics exist.
+- These make #2's monitor graphs actually interesting.
+
+Original scope notes:
 
 Events today carry: `integration`, `event_type`, `status`, `timestamp`,
 `payload`, `error`, `classification`, `resolution`, `idempotency_key`.
