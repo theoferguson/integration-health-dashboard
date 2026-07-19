@@ -87,7 +87,27 @@ duplicated `orgIdFor` into `middleware/auth.getOrgId`.
 
 ---
 
-## 2. "Monitor" feature — user-defined event tracking
+## 2. "Monitor" feature — ✅ v1 IMPLEMENTED (2026-07-19, `43aef40`)
+
+Graph-only v1 shipped: org-scoped `monitors` table, a match engine
+(`monitorMatch.ts` — `buildMatchClause`/`validateMatchSpec`, json paths bound
+not interpolated, severity ordinal, 8-case self-check), org-scoped CRUD +
+bucketed graph query (`monitorStore.ts`), `/api/monitors` routes (member read /
+admin write), and a **Monitors** tab (list with 24h match badge + enable/delete,
+create form with a predicate builder, expandable bar-chart graph over 24h/7d/30d).
+
+**Deploy:** IHD-only; the `monitors` table is created on boot (`CREATE IF NOT
+EXISTS`). No SDK/host change. Push + `fly deploy -a integration-health-dashboard`.
+
+**Scope cuts (v1) — deferred:**
+- No notifications/firings yet (graph is the artifact). In-app alert layer is a
+  follow-on once trigger semantics are chosen (threshold/window vs any-new-match).
+- No spec editing in the UI (create + toggle + delete only); PATCH-spec exists
+  server-side, wire an edit form when needed.
+- No dashboard "N firing" badge yet.
+- Firing/alert history + its retention sweep — only if the alert layer lands.
+
+Original design notes below.
 
 Let orgs define **monitors**: saved rules that watch for specific event types,
 customizable by the event data — the IHD analogue of a Datadog/Sentry alert.
