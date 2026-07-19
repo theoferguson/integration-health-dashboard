@@ -3,7 +3,7 @@
  * SQLite-backed storage for integration events
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv7 } from './uuidv7.js';
 import { db } from '../db/connection.js';
 import {
   EVENT_STORE,
@@ -56,6 +56,11 @@ interface EventRow {
   error: string | null;
   classification: string | null;
   resolution: string | null;
+  metrics: string | null;
+  tags: string | null;
+  environment: string | null;
+  severity: string | null;
+  source: string | null;
 }
 
 function rowToEvent(row: EventRow): IntegrationEvent {
@@ -69,6 +74,11 @@ function rowToEvent(row: EventRow): IntegrationEvent {
     error: row.error ? JSON.parse(row.error) : undefined,
     classification: row.classification ? JSON.parse(row.classification) : undefined,
     resolution: row.resolution ? JSON.parse(row.resolution) : undefined,
+    metrics: row.metrics ? JSON.parse(row.metrics) : undefined,
+    tags: row.tags ? JSON.parse(row.tags) : undefined,
+    environment: row.environment ?? undefined,
+    severity: (row.severity as IntegrationEvent['severity']) ?? undefined,
+    source: row.source ?? undefined,
   };
 }
 
@@ -124,18 +134,23 @@ function buildWhere(options?: GetEventsOptions): { clause: string; params: unkno
 export function createEvent(input: CreateEventInput): IntegrationEvent {
   const timestamp = new Date();
   const event: IntegrationEvent = {
-    id: uuidv4(),
+    id: uuidv7(),
     integration: input.integration,
     eventType: input.eventType,
     status: input.status,
     timestamp,
     payload: input.payload,
     error: input.error,
+    metrics: input.metrics,
+    tags: input.tags,
+    environment: input.environment,
+    severity: input.severity,
+    source: input.source,
   };
 
   db.prepare(
-    `INSERT INTO events (id, project_id, integration, event_type, status, timestamp, payload, error, idempotency_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO events (id, project_id, integration, event_type, status, timestamp, payload, error, idempotency_key, metrics, tags, environment, severity, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     event.id,
     input.projectId ?? null,
@@ -145,7 +160,12 @@ export function createEvent(input: CreateEventInput): IntegrationEvent {
     timestamp.getTime(),
     JSON.stringify(event.payload),
     event.error ? JSON.stringify(event.error) : null,
-    input.idempotencyKey ?? null
+    input.idempotencyKey ?? null,
+    input.metrics ? JSON.stringify(input.metrics) : null,
+    input.tags ? JSON.stringify(input.tags) : null,
+    input.environment ?? null,
+    input.severity ?? null,
+    input.source ?? null
   );
 
   return event;

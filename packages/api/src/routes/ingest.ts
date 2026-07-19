@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { getProjectByApiKey } from '../services/projectStore.js';
 import { createEvent, findEventByIdempotencyKey } from '../services/eventStore.js';
-import type { EventError, EventStatus } from '../types/index.js';
+import type { EventError, EventStatus, ErrorSeverity } from '../types/index.js';
 
 const router = Router();
+
+const SEVERITIES: ErrorSeverity[] = ['low', 'medium', 'high', 'critical'];
 
 interface IngestBody {
   integration: string;
@@ -12,6 +14,11 @@ interface IngestBody {
   payload: Record<string, unknown>;
   error?: EventError;
   idempotencyKey?: string;
+  metrics?: Record<string, number>;
+  tags?: Record<string, string>;
+  environment?: string;
+  severity?: ErrorSeverity;
+  source?: string;
 }
 
 type ParseResult = { ok: true; data: IngestBody } | { ok: false; message: string };
@@ -27,8 +34,8 @@ function parseIngestBody(body: unknown): ParseResult {
   }
   const b = body as Record<string, unknown>;
 
-  if (b.schemaVersion !== 1) {
-    return { ok: false, message: 'schemaVersion must be 1' };
+  if (b.schemaVersion !== 1 && b.schemaVersion !== 2) {
+    return { ok: false, message: 'schemaVersion must be 1 or 2' };
   }
   if (typeof b.integration !== 'string' || !b.integration) {
     return { ok: false, message: 'integration is required' };
@@ -69,6 +76,46 @@ function parseIngestBody(body: unknown): ParseResult {
     return { ok: false, message: 'idempotency_key must be a string' };
   }
 
+  // schemaVersion 2 optional dimensions (all validated at this trust boundary).
+  let metrics: Record<string, number> | undefined;
+  if (b.metrics !== undefined) {
+    if (typeof b.metrics !== 'object' || b.metrics === null || Array.isArray(b.metrics)) {
+      return { ok: false, message: 'metrics must be an object of numbers' };
+    }
+    for (const [k, v] of Object.entries(b.metrics as Record<string, unknown>)) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) {
+        return { ok: false, message: `metrics.${k} must be a finite number` };
+      }
+    }
+    metrics = b.metrics as Record<string, number>;
+  }
+
+  let tags: Record<string, string> | undefined;
+  if (b.tags !== undefined) {
+    if (typeof b.tags !== 'object' || b.tags === null || Array.isArray(b.tags)) {
+      return { ok: false, message: 'tags must be an object of strings' };
+    }
+    for (const [k, v] of Object.entries(b.tags as Record<string, unknown>)) {
+      if (typeof v !== 'string') {
+        return { ok: false, message: `tags.${k} must be a string` };
+      }
+    }
+    tags = b.tags as Record<string, string>;
+  }
+
+  if (b.environment !== undefined && typeof b.environment !== 'string') {
+    return { ok: false, message: 'environment must be a string' };
+  }
+  if (
+    b.severity !== undefined &&
+    (typeof b.severity !== 'string' || !SEVERITIES.includes(b.severity as ErrorSeverity))
+  ) {
+    return { ok: false, message: 'severity must be one of low, medium, high, critical' };
+  }
+  if (b.source !== undefined && typeof b.source !== 'string') {
+    return { ok: false, message: 'source must be a string' };
+  }
+
   return {
     ok: true,
     data: {
@@ -78,6 +125,11 @@ function parseIngestBody(body: unknown): ParseResult {
       payload: (b.payload as Record<string, unknown>) ?? {},
       error,
       idempotencyKey: b.idempotency_key as string | undefined,
+      metrics,
+      tags,
+      environment: b.environment as string | undefined,
+      severity: b.severity as ErrorSeverity | undefined,
+      source: b.source as string | undefined,
     },
   };
 }
@@ -99,7 +151,8 @@ router.post('/', (req, res) => {
   if (!parsed.ok) {
     return res.status(400).json({ error: parsed.message });
   }
-  const { integration, eventType, status, payload, error, idempotencyKey } = parsed.data;
+  const { integration, eventType, status, payload, error, idempotencyKey, metrics, tags, environment, severity, source } =
+    parsed.data;
 
   if (idempotencyKey) {
     const existing = findEventByIdempotencyKey(project.id, idempotencyKey);
@@ -117,6 +170,11 @@ router.post('/', (req, res) => {
       payload,
       error,
       idempotencyKey,
+      metrics,
+      tags,
+      environment,
+      severity,
+      source,
     });
     return res.status(201).json({ event, duplicate: false });
   } catch (err) {

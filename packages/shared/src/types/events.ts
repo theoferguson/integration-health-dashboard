@@ -40,7 +40,24 @@ export interface ErrorClassification {
   businessImpact?: string;
 }
 
-export interface IntegrationEvent {
+/**
+ * Structured, queryable fields a reporter can attach to any event (all optional,
+ * schemaVersion 2). They power trend charts, filtering, and monitor graphs.
+ */
+export interface EventDimensions {
+  /** Numeric measures for trend charts (e.g. { latencyMs: 214, itemCount: 12 }). */
+  metrics?: Record<string, number>;
+  /** Free-form labels for filtering/grouping (e.g. { region: 'us-east' }). */
+  tags?: Record<string, string>;
+  /** Deployment environment: 'prod' | 'staging' | ... */
+  environment?: string;
+  /** Reporter-supplied severity, distinct from the AI-derived classification.severity. */
+  severity?: ErrorSeverity;
+  /** Reporter identity, e.g. 'iha@1.4.0'. */
+  source?: string;
+}
+
+export interface IntegrationEvent extends EventDimensions {
   id: string;
   integration: string;
   eventType: string;
@@ -52,7 +69,7 @@ export interface IntegrationEvent {
   resolution?: Resolution;
 }
 
-export interface CreateEventInput {
+export interface CreateEventInput extends EventDimensions {
   integration: string;
   eventType: string;
   status: EventStatus;

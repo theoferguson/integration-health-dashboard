@@ -58,7 +58,12 @@ db.exec(`
     error TEXT,
     classification TEXT,
     resolution TEXT,
-    idempotency_key TEXT
+    idempotency_key TEXT,
+    metrics TEXT,
+    tags TEXT,
+    environment TEXT,
+    severity TEXT,
+    source TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
@@ -76,6 +81,15 @@ if (!projectColumns.some((c) => c.name === 'user_id')) {
 }
 if (!projectColumns.some((c) => c.name === 'org_id')) {
   db.exec('ALTER TABLE projects ADD COLUMN org_id TEXT REFERENCES orgs(id)');
+}
+
+// schemaVersion 2 event dimensions - add the columns on deployments whose events
+// table predates them (CREATE IF NOT EXISTS won't alter an existing table).
+const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
+for (const col of ['metrics', 'tags', 'environment', 'severity', 'source']) {
+  if (!eventColumns.some((c) => c.name === col)) {
+    db.exec(`ALTER TABLE events ADD COLUMN ${col} TEXT`);
+  }
 }
 
 // Backfill: every user without an org membership gets an auto-created personal

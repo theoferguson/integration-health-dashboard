@@ -9,9 +9,10 @@
 
 import { randomUUID } from 'node:crypto';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export type IngestStatus = 'success' | 'failure' | 'pending';
+export type IngestSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export interface IngestError {
   message: string;
@@ -27,6 +28,16 @@ export interface ReportInput {
   error?: IngestError;
   /** Dedupes retried sends of the same logical event. Auto-generated if omitted. */
   idempotencyKey?: string;
+  /** Numeric measures for trend charts, e.g. { latencyMs: 214, itemCount: 12 }. */
+  metrics?: Record<string, number>;
+  /** Free-form labels for filtering/grouping, e.g. { region: 'us-east' }. */
+  tags?: Record<string, string>;
+  /** Deployment environment: 'prod' | 'staging' | ... */
+  environment?: string;
+  /** Reporter-supplied severity. */
+  severity?: IngestSeverity;
+  /** Reporter identity, e.g. 'iha@1.4.0'. */
+  source?: string;
 }
 
 export interface ReportResult {
@@ -83,6 +94,12 @@ export class IHDClient {
       payload: input.payload ?? {},
       error: input.error,
       idempotency_key: idempotencyKey,
+      // Optional schemaVersion 2 dimensions - undefined ones are omitted by JSON.
+      metrics: input.metrics,
+      tags: input.tags,
+      environment: input.environment,
+      severity: input.severity,
+      source: input.source,
     });
 
     let lastError: unknown;

@@ -30,12 +30,41 @@ describe('IHDClient', () => {
       expect(init.headers.Authorization).toBe('Bearer proj_test');
 
       const body = JSON.parse(init.body);
-      expect(body.schemaVersion).toBe(1);
+      expect(body.schemaVersion).toBe(2);
       expect(body.integration).toBe('weather');
       expect(body.event_type).toBe('forecast.sync');
       expect(body.status).toBe('success');
       expect(body.payload).toEqual({ zone: 'NYZ072' });
       expect(body.idempotency_key).toBeDefined();
+    });
+
+    it('sends schemaVersion 2 dimensions when provided, omits them otherwise', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, {}));
+      const client = new IHDClient({ apiKey: 'k', endpoint: 'https://ihd.example.com', fetchImpl });
+
+      await client.report({
+        integration: 'weather',
+        eventType: 'refresh',
+        status: 'success',
+        metrics: { latencyMs: 214 },
+        tags: { region: 'us-east' },
+        environment: 'prod',
+        severity: 'high',
+        source: 'iha@1.4.0',
+      });
+
+      const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+      expect(body.metrics).toEqual({ latencyMs: 214 });
+      expect(body.tags).toEqual({ region: 'us-east' });
+      expect(body.environment).toBe('prod');
+      expect(body.severity).toBe('high');
+      expect(body.source).toBe('iha@1.4.0');
+
+      // A report without dimensions omits the keys entirely (still valid v2).
+      await client.report({ integration: 'a', eventType: 'b', status: 'success' });
+      const plain = JSON.parse(fetchImpl.mock.calls[1][1].body);
+      expect('metrics' in plain).toBe(false);
+      expect('severity' in plain).toBe(false);
     });
 
     it('should strip a trailing slash from the endpoint', async () => {

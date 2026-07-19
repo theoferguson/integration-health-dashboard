@@ -133,6 +133,59 @@ describe('POST /api/ingest', () => {
     expect(eventsResponse.body.events).toHaveLength(1);
   });
 
+  describe('schemaVersion 2 dimensions', () => {
+    it('accepts and persists metrics/tags/environment/severity/source', async () => {
+      const response = await request(app)
+        .post('/api/ingest')
+        .set('Authorization', `Bearer ${project.apiKey}`)
+        .send({
+          schemaVersion: 2,
+          integration: 'weather',
+          event_type: 'forecast.sync',
+          status: 'success',
+          payload: {},
+          metrics: { latencyMs: 214, itemCount: 12 },
+          tags: { region: 'us-east' },
+          environment: 'prod',
+          severity: 'high',
+          source: 'iha@1.4.0',
+        });
+
+      expect(response.status).toBe(201);
+      const ev = response.body.event;
+      expect(ev.metrics).toEqual({ latencyMs: 214, itemCount: 12 });
+      expect(ev.tags).toEqual({ region: 'us-east' });
+      expect(ev.environment).toBe('prod');
+      expect(ev.severity).toBe('high');
+      expect(ev.source).toBe('iha@1.4.0');
+      // id is a UUIDv7 (version nibble 7)
+      expect(ev.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+
+      // survives a round-trip through the events API
+      const read = await request(app).get('/api/events?integration=weather').set('Cookie', cookie);
+      expect(read.body.events[0].metrics).toEqual({ latencyMs: 214, itemCount: 12 });
+      expect(read.body.events[0].severity).toBe('high');
+    });
+
+    it('rejects a non-numeric metric value', async () => {
+      const response = await request(app)
+        .post('/api/ingest')
+        .set('Authorization', `Bearer ${project.apiKey}`)
+        .send({ ...validBody, schemaVersion: 2, metrics: { latencyMs: 'fast' } });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('metrics');
+    });
+
+    it('rejects an out-of-range severity', async () => {
+      const response = await request(app)
+        .post('/api/ingest')
+        .set('Authorization', `Bearer ${project.apiKey}`)
+        .send({ ...validBody, schemaVersion: 2, severity: 'catastrophic' });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('severity');
+    });
+  });
+
   it('should not dedupe the same idempotency_key across different projects', async () => {
     const otherProject = createProject('other-project');
     const body = { ...validBody, idempotency_key: 'shared-key' };
