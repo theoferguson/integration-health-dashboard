@@ -99,3 +99,25 @@ the dashboard and monitors (#2) have more to work with. Candidates:
 
 Keep the SDK's wire format versioned (`schemaVersion`) and backward compatible;
 new fields should be optional so existing reporters keep working.
+
+---
+
+## 4. Data retention / cleanup (remove data older than 60 days)
+
+Requested as a host-app cleanup, but the host app **doesn't accumulate history**:
+its `snapshots` table is upsert, one row per integration, overwritten each
+refresh (~4 rows total). Nothing there ages.
+
+The data that actually grows unbounded is **IHD's `events` table** — every
+reported event is inserted and never deleted (the only `DELETE FROM events` is
+the test-only `clearEvents`). That's what a 60-day retention job should target.
+
+Plan:
+- A scheduled sweep (node-cron in the IHD process, or a small daily job) that
+  runs `DELETE FROM events WHERE timestamp < ?` for a 60-day cutoff.
+- Make the window configurable (`EVENT_RETENTION_DAYS`, default 60).
+- When the Monitor feature (#2) lands, its `monitor_firings` history needs the
+  same sweep (also currently unbounded per that design).
+- Consider `VACUUM`/WAL checkpoint after large deletes so the SQLite file
+  actually shrinks on the Fly volume.
+- Leave a `ponytail:` note if we start with a naive full-table delete.
