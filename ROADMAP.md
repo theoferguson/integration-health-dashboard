@@ -5,25 +5,28 @@ Backlog for the Integration Health Dashboard (IHD) and its companion
 
 ---
 
-## 5. Host app: history per integration (not just a live snapshot)
+## 5. Build out each integration for a more illustrative IHD
 
-Today the host app stores one `snapshots` row per integration (upsert, latest
-only). Turn each integration into an **ongoing tracker** with history, and pick
-the presentation that fits each data type rather than one generic view:
-- **weather** — time series of temperature/conditions; a line/area chart over time.
-- **nyc-civic-finance** — cumulative contributions and daily inflow; running
-  totals + a "new since last check" feed.
-- **nyt-news / nyt-books** — change log / rank movement over time (books already
-  has rank-vs-last-week; make it a real trend), not just the current list.
+Not a per-integration history/tracker — the goal is to flesh each host-app
+integration out a little so the IHD has richer, more illustrative data and
+use-cases to show. Each integration is unique; emit the dimensions that make
+*it* interesting so the dashboard (and #2 monitors) have real signals to graph
+and match on, rather than one generic view.
 
-Shape:
-- Append-only `snapshot_history` table (integration, fetched_at, data) alongside
-  the current latest-snapshot row, OR make `snapshots` append-only and derive
-  "latest" with `MAX(fetched_at)`.
-- Only append when the data actually changed (the new `fetch_state` signature /
-  `isUnchanged` check already tells us this cheaply - no dupe points).
-- Per-integration history views on the web tabs.
-- Needs its own retention sweep (tie into workstream #4's 60-day cutoff).
+Per-integration ideas (emit as schemaVersion 2 `metrics`/`tags`/`severity`):
+- **weather** — `metrics.tempF`, `tags.conditions`; a monitor like "tempF > 90"
+  becomes a real demo.
+- **nyc-civic-finance** — `metrics.newContributions` / `metrics.totalAmount`
+  per refresh; "big new inflow" is a monitorable signal.
+- **nyt-news / nyt-books** — `metrics.itemCount`, rank movement as a metric;
+  surface change rather than just the current list.
+
+Shape (deliberately light):
+- Mostly host-app adapter changes: widen each `metrics`/`tags` payload; no new
+  IHD schema needed (schemaVersion 2 already carries them).
+- Optional IHD web touches: per-metric mini-charts on the integration cards
+  (the `Sparkline` already generalizes) driven by whatever metrics arrive.
+- No new tables, no history store — this is data richness, not retention.
 
 ---
 

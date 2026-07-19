@@ -8,6 +8,10 @@ import type {
   IntegrationEvent,
   HealthOverview,
   ResolutionStatus,
+  Monitor,
+  MonitorSummary,
+  MonitorMatchSpec,
+  MonitorSeriesPoint,
 } from '../types';
 import { API, TIMING } from '../types';
 
@@ -273,4 +277,55 @@ export async function joinOrgRequest(code: string): Promise<{ id: string; name: 
     body: JSON.stringify({ code }),
   });
   return data.org;
+}
+
+// ============ Monitor APIs ============
+
+export async function fetchMonitors(): Promise<MonitorSummary[]> {
+  const data = await apiCall<{ monitors: MonitorSummary[] }>(buildUrl('/monitors'));
+  return data.monitors;
+}
+
+export async function createMonitorRequest(
+  name: string,
+  matchSpec: MonitorMatchSpec
+): Promise<Monitor> {
+  const data = await apiCall<{ monitor: Monitor }>(`${API_BASE}/monitors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, matchSpec }),
+  });
+  return data.monitor;
+}
+
+export async function updateMonitorRequest(
+  id: string,
+  patch: { name?: string; enabled?: boolean; matchSpec?: MonitorMatchSpec }
+): Promise<Monitor> {
+  const data = await apiCall<{ monitor: Monitor }>(`${API_BASE}/monitors/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return data.monitor;
+}
+
+export async function deleteMonitorRequest(id: string): Promise<void> {
+  await apiCall(`${API_BASE}/monitors/${id}`, { method: 'DELETE' });
+}
+
+export interface MonitorSeriesResponse {
+  monitor: Monitor;
+  series: MonitorSeriesPoint[];
+  windowMs: number;
+  bucketMs: number;
+}
+
+export async function fetchMonitorSeries(
+  id: string,
+  opts?: { window?: number; bucket?: number }
+): Promise<MonitorSeriesResponse> {
+  return apiCall(
+    buildUrl(`/monitors/${id}/series`, { window: opts?.window, bucket: opts?.bucket })
+  );
 }

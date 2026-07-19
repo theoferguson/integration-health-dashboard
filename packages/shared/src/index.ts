@@ -6,6 +6,7 @@
 // Types
 export * from './types/integrations.js';
 export * from './types/events.js';
+export * from './types/monitors.js';
 
 // Constants
 export * from './constants.js';

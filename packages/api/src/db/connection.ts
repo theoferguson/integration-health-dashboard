@@ -71,6 +71,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_events_idempotency
     ON events(project_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+  -- Monitors: an org-scoped saved event query rendered as a graph (#2). The
+  -- graph is derived from the events table, so no firings table in v1.
+  CREATE TABLE IF NOT EXISTS monitors (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id),
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    match_spec TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_monitors_org ON monitors(org_id);
 `);
 
 // CREATE TABLE IF NOT EXISTS is a no-op against a projects table that predates

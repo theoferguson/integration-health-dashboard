@@ -4,11 +4,11 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel } from './components';
+import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, MonitorsPanel } from './components';
 import { useHealthData, useAuth } from './hooks';
 import type { IntegrationEvent } from './types';
 
-type TabType = 'integrations' | 'events' | 'projects';
+type TabType = 'integrations' | 'events' | 'monitors' | 'projects';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('integrations');
@@ -125,6 +125,12 @@ function App() {
               All Events
             </TabButton>
             <TabButton
+              active={activeTab === 'monitors'}
+              onClick={() => setActiveTab('monitors')}
+            >
+              Monitors
+            </TabButton>
+            <TabButton
               active={activeTab === 'projects'}
               onClick={() => setActiveTab('projects')}
             >
@@ -216,6 +222,10 @@ function App() {
 
         {activeTab === 'events' && (
           <EventsView onEventClick={setSelectedEvent} />
+        )}
+
+        {activeTab === 'monitors' && (
+          <MonitorsPanel loggedIn={auth?.loggedIn ?? false} isAdmin={role === 'admin'} />
         )}
 
         {activeTab === 'projects' && (
