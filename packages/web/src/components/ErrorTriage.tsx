@@ -41,6 +41,10 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
   const resolutionStatus = event.resolution?.status || 'open';
   const isFailure = event.status === 'failure';
 
+  const hasMetrics = event.metrics && Object.keys(event.metrics).length > 0;
+  const hasTags = event.tags && Object.keys(event.tags).length > 0;
+  const hasSignals = hasMetrics || hasTags || event.severity || event.environment || event.source;
+
   const handleClassify = async () => {
     setIsClassifying(true);
     setError(null);
@@ -187,6 +191,53 @@ export function ErrorTriage({ event, onClose, onUpdated }: ErrorTriageProps) {
               <p><span className="text-gray-500">Status:</span> {event.status}</p>
             </div>
           </div>
+
+          {/* Signals - schemaVersion 2 dimensions, shown when present */}
+          {hasSignals && (
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Signals</h3>
+              <div className="bg-gray-50 border rounded p-3 text-sm text-gray-700 space-y-2">
+                {(event.severity || event.environment || event.source) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {event.severity && (
+                      <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded border ${severityColors[event.severity]}`}
+                      >
+                        {event.severity.toUpperCase()}
+                      </span>
+                    )}
+                    {event.environment && (
+                      <span className="px-2 py-0.5 text-xs rounded bg-gray-200 text-gray-700">
+                        env: {event.environment}
+                      </span>
+                    )}
+                    {event.source && (
+                      <span className="text-xs text-gray-500">source: {event.source}</span>
+                    )}
+                  </div>
+                )}
+                {hasMetrics && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {Object.entries(event.metrics!).map(([k, v]) => (
+                      <span key={k} className="text-xs">
+                        <span className="text-gray-500">{k}:</span>{' '}
+                        <span className="font-medium">{k === 'latencyMs' ? `${v} ms` : v}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {hasTags && (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(event.tags!).map(([k, v]) => (
+                      <span key={k} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                        {k}: {v}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Payload - shown for every event */}
           {event.payload && Object.keys(event.payload).length > 0 && (
