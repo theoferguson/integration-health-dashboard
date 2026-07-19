@@ -327,3 +327,12 @@ export function reopenEvent(id: string): IntegrationEvent | undefined {
 export function clearEvents(): void {
   db.prepare('DELETE FROM events').run();
 }
+
+/**
+ * Deletes events older than `retentionDays` (by timestamp). Returns the number
+ * of rows removed. Keeps the events table from growing without bound.
+ */
+export function purgeOldEvents(retentionDays: number): number {
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  return db.prepare('DELETE FROM events WHERE timestamp < ?').run(cutoff).changes;
+}

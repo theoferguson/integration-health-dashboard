@@ -7,7 +7,9 @@ import {
   getEventStats,
   getDistinctIntegrations,
   clearEvents,
+  purgeOldEvents,
 } from '../eventStore.js';
+import { db } from '../../db/connection.js';
 import type { CreateEventInput } from '../../types/index.js';
 
 describe('eventStore', () => {
@@ -340,6 +342,23 @@ describe('eventStore', () => {
 
       const events = getEvents();
       expect(events).toHaveLength(0);
+    });
+  });
+
+  describe('purgeOldEvents', () => {
+    it('deletes events older than the retention window, keeps recent ones', () => {
+      const old = createEvent({ integration: 'weather', eventType: 'old', status: 'success', payload: {} });
+      const recent = createEvent({ integration: 'weather', eventType: 'recent', status: 'success', payload: {} });
+
+      // Backdate one event to 61 days ago (createEvent always stamps "now").
+      const sixtyOneDaysAgo = Date.now() - 61 * 24 * 60 * 60 * 1000;
+      db.prepare('UPDATE events SET timestamp = ? WHERE id = ?').run(sixtyOneDaysAgo, old.id);
+
+      const removed = purgeOldEvents(60);
+
+      expect(removed).toBe(1);
+      expect(getEventById(old.id)).toBeUndefined();
+      expect(getEventById(recent.id)).toBeDefined();
     });
   });
 });
