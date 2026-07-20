@@ -16,7 +16,8 @@ uncoupled.
 
 **Done (2026-07-20):**
 - [x] Publish the SDK properly — `publishConfig.access=public`, `prepublishOnly`
-  build, bumped to **0.3.0**. (User runs the actual `npm publish`.)
+  build. **0.3.0 is published** (DSN); **0.4.0 (beforeSend, below) is committed
+  but not yet published** — publish it to reconcile the READMEs with npm.
 - [x] Reconcile the README with the shipped product (it described a construction
   demo, a nonexistent `simulator`, an in-memory store, and an SDK API —
   `monitor.capture`/React/2s-batching — that was never built). `blueprint.md`
