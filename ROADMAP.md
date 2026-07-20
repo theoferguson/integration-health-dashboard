@@ -5,28 +5,31 @@ Backlog for the Integration Health Dashboard (IHD) and its companion
 
 ---
 
-## 5. Build out each integration for a more illustrative IHD
+## 5. Build out each integration for a more illustrative IHD — ✅ adapter hook shipped (2026-07-19)
 
 Not a per-integration history/tracker — the goal is to flesh each host-app
-integration out a little so the IHD has richer, more illustrative data and
-use-cases to show. Each integration is unique; emit the dimensions that make
-*it* interesting so the dashboard (and #2 monitors) have real signals to graph
-and match on, rather than one generic view.
+integration out so the IHD has richer, more illustrative data. Done via an
+**adapter `dimensions()` hook**: `IntegrationAdapter.dimensions?(snapshot)`
+returns `{ metrics?, tags?, payload?, severity? }`, which `runAdapter` merges
+into the IHD report (runner-owned `latencyMs`/`itemCount`/`source`/`environment`
+still win on collision). Each integration now opts in to emit its own queryable
+signals — no change to the IHD schema (schemaVersion 2 already carries them) and
+no new tables. This is the mechanism that makes #2 monitor predicates bite on
+real per-integration data.
 
-Per-integration ideas (emit as schemaVersion 2 `metrics`/`tags`/`severity`):
-- **weather** — `metrics.tempF`, `tags.conditions`; a monitor like "tempF > 90"
-  becomes a real demo.
-- **nyc-civic-finance** — `metrics.newContributions` / `metrics.totalAmount`
-  per refresh; "big new inflow" is a monitorable signal.
-- **nyt-news / nyt-books** — `metrics.itemCount`, rank movement as a metric;
-  surface change rather than just the current list.
+Emitted today (host `adapters/*.ts`):
+- **weather** — `metrics.tempF` + `alertCount`, `tags.conditions`, `severity`
+  from active NWS alerts. ("tempF > 90" / "any Severe alert" are now monitorable.)
+- **nyc-civic-finance** — `metrics.totalAmount` + `maxContribution`.
+- **nyt-news** — `metrics.topStoriesCount`/`mostViewedCount`, `tags.topSection`.
+- **nyt-books** — `metrics.newEntries` + `topWeeksOnList`, `tags.list`.
 
-Shape (deliberately light):
-- Mostly host-app adapter changes: widen each `metrics`/`tags` payload; no new
-  IHD schema needed (schemaVersion 2 already carries them).
-- Optional IHD web touches: per-metric mini-charts on the integration cards
-  (the `Sparkline` already generalizes) driven by whatever metrics arrive.
-- No new tables, no history store — this is data richness, not retention.
+**Deploy:** host-app only (no SDK/IHD change). Adapters already send schemaVersion
+2. Redeploy the host to start emitting the new dimensions.
+
+Remaining (optional, backlog):
+- IHD web: per-metric mini-charts on the integration cards driven by whatever
+  metrics arrive (the `Sparkline` already generalizes beyond latency).
 
 ---
 
