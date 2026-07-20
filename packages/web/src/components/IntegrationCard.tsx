@@ -4,8 +4,35 @@ import { Sparkline } from './Sparkline';
 interface IntegrationCardProps {
   integration: Integration;
   onClick?: () => void;
-  /** Recent refresh latencies (ms), oldest→newest, for a trend sparkline. */
-  latencies?: number[];
+  /** Recent metric series (oldest→newest) keyed by metric name, for trend sparklines. */
+  metrics?: Record<string, number[]>;
+}
+
+// Friendly labels for the metrics integrations emit; unknown keys fall back to
+// a camelCase split (e.g. "someMetric" -> "Some metric").
+const METRIC_LABELS: Record<string, string> = {
+  latencyMs: 'Latency',
+  itemCount: 'Items',
+  tempF: 'Temp °F',
+  alertCount: 'Alerts',
+  totalAmount: 'Total',
+  maxContribution: 'Max contrib.',
+  topStoriesCount: 'Top stories',
+  mostViewedCount: 'Most viewed',
+  newEntries: 'New entries',
+  topWeeksOnList: 'Top weeks',
+};
+
+function metricLabel(key: string): string {
+  if (METRIC_LABELS[key]) return METRIC_LABELS[key];
+  const spaced = key.replace(/([A-Z])/g, ' $1').trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function formatMetric(key: string, v: number): string {
+  if (key.endsWith('Ms')) return `${Math.round(v)} ms`;
+  if (/amount|contribution/i.test(key)) return `$${Math.round(v).toLocaleString()}`;
+  return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1);
 }
 
 const statusColors = {
@@ -20,11 +47,14 @@ const statusDots = {
   down: 'bg-red-500',
 };
 
-export function IntegrationCard({ integration, onClick, latencies }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onClick, metrics }: IntegrationCardProps) {
   const timeAgo = integration.lastSync
     ? formatTimeAgo(new Date(integration.lastSync))
     : 'Never';
-  const latestLatency = latencies && latencies.length > 0 ? latencies[latencies.length - 1] : null;
+  // Metrics with at least one value, latencyMs pinned first for continuity, rest alphabetical.
+  const metricEntries = Object.entries(metrics ?? {})
+    .filter(([, values]) => values.length > 0)
+    .sort(([a], [b]) => (a === 'latencyMs' ? -1 : b === 'latencyMs' ? 1 : a.localeCompare(b)));
 
   return (
     <div
@@ -58,13 +88,19 @@ export function IntegrationCard({ integration, onClick, latencies }: Integration
         </div>
       </div>
 
-      {latestLatency !== null && (
-        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20 flex items-end justify-between">
-          <div>
-            <div className="opacity-60 text-xs">Latency</div>
-            <div className="font-medium text-xs sm:text-sm">{Math.round(latestLatency)} ms</div>
-          </div>
-          {latencies && <Sparkline values={latencies} />}
+      {metricEntries.length > 0 && (
+        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20 space-y-1.5">
+          {metricEntries.map(([key, values]) => (
+            <div key={key} className="flex items-end justify-between gap-2">
+              <div className="min-w-0">
+                <div className="opacity-60 text-xs truncate">{metricLabel(key)}</div>
+                <div className="font-medium text-xs sm:text-sm">
+                  {formatMetric(key, values[values.length - 1])}
+                </div>
+              </div>
+              <Sparkline values={values} />
+            </div>
+          ))}
         </div>
       )}
 

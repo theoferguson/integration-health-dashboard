@@ -28,13 +28,17 @@ function App() {
     updateEvent,
   } = useHealthData({ filter });
 
-  // Per-integration refresh-latency series (oldest→newest) from recent events'
-  // metrics, for the trend sparkline on each card. Events arrive newest-first.
-  const latencyByIntegration = useMemo(() => {
-    const map: Record<string, number[]> = {};
+  // Per-integration metric series (oldest→newest) from recent events' metrics,
+  // for trend sparklines on each card. Events arrive newest-first, so reverse.
+  // Shape: { [integration]: { [metricName]: number[] } }.
+  const metricsByIntegration = useMemo(() => {
+    const map: Record<string, Record<string, number[]>> = {};
     for (const ev of [...events].reverse()) {
-      const ms = ev.metrics?.latencyMs;
-      if (typeof ms === 'number') (map[ev.integration] ??= []).push(ms);
+      if (!ev.metrics) continue;
+      const perMetric = (map[ev.integration] ??= {});
+      for (const [key, value] of Object.entries(ev.metrics)) {
+        if (typeof value === 'number') (perMetric[key] ??= []).push(value);
+      }
     }
     return map;
   }, [events]);
@@ -185,7 +189,7 @@ function App() {
                     <IntegrationCard
                       key={integration.id}
                       integration={integration}
-                      latencies={latencyByIntegration[integration.id]}
+                      metrics={metricsByIntegration[integration.id]}
                     />
                   ))}
                 </div>
