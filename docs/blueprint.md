@@ -1,5 +1,13 @@
 # Blueprint: Integration Health Dashboard
 
+> ⚠️ **Historical.** This is the original pre-implementation design and no longer
+> matches the shipped system. It predates SQLite persistence, multi-tenancy,
+> UUIDv7 ids, the `/api/ingest` contract, the SDK, and the domain-agnostic
+> classifier — several of which it lists as *non-goals*. For the current
+> architecture see the [README](../README.md),
+> [DESIGN-monitors-and-event-data.md](./DESIGN-monitors-and-event-data.md), and
+> [ROADMAP.md](../ROADMAP.md). Kept for provenance.
+
 ## Overview
 
 ### Problem Statement

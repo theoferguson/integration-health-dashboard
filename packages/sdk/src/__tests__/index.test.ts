@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { IHDClient } from '../index.js';
+import { IHDClient, parseDsn } from '../index.js';
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -184,6 +184,38 @@ describe('IHDClient', () => {
 
       const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
       expect(body.error.message).toBe('plain string failure');
+    });
+  });
+
+  describe('dsn config', () => {
+    it('parses a DSN into apiKey + endpoint', () => {
+      expect(parseDsn('https://proj_abc@ihd.example.com')).toEqual({
+        apiKey: 'proj_abc',
+        endpoint: 'https://ihd.example.com',
+      });
+    });
+
+    it('preserves a base path and port, strips a trailing slash', () => {
+      expect(parseDsn('https://proj_abc@ihd.example.com:8443/base/')).toEqual({
+        apiKey: 'proj_abc',
+        endpoint: 'https://ihd.example.com:8443/base',
+      });
+    });
+
+    it('throws on a malformed DSN or a missing key', () => {
+      expect(() => parseDsn('not a url')).toThrow(/invalid DSN/);
+      expect(() => parseDsn('https://ihd.example.com')).toThrow(/missing the API key/);
+    });
+
+    it('a client built from a DSN posts with the right endpoint and auth', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, { duplicate: false }));
+      const client = new IHDClient({ dsn: 'https://proj_test@ihd.example.com', fetchImpl });
+
+      await client.report({ integration: 'weather', eventType: 'sync', status: 'success' });
+
+      const [url, init] = fetchImpl.mock.calls[0];
+      expect(url).toBe('https://ihd.example.com/api/ingest');
+      expect(init.headers.Authorization).toBe('Bearer proj_test');
     });
   });
 

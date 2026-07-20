@@ -1,9 +1,12 @@
 {
   "name": "@theof/ihd-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Client SDK for reporting integration events to Integration Health Dashboard",
   "license": "MIT",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -22,7 +25,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.3.3",

@@ -5,6 +5,45 @@ Backlog for the Integration Health Dashboard (IHD) and its companion
 
 ---
 
+## 6. General-purpose hardening — make IHD a credible public tool
+
+From a 2026-07-20 review of the public contract against observability
+best-practice (Sentry DSN/envelope, Datadog events + unified `env`/`service`/
+`version` tagging, OTel semantic conventions, SDK batching/sampling/PII norms).
+The core contract is already domain-agnostic (no IHA coupling in the wire/SDK/
+storage/auth) — this list is what would make it *best-practice* general, not just
+uncoupled.
+
+**Done (2026-07-20):**
+- [x] Publish the SDK properly — `publishConfig.access=public`, `prepublishOnly`
+  build, bumped to **0.3.0**. (User runs the actual `npm publish`.)
+- [x] Reconcile the README with the shipped product (it described a construction
+  demo, a nonexistent `simulator`, an in-memory store, and an SDK API —
+  `monitor.capture`/React/2s-batching — that was never built). `blueprint.md`
+  marked historical.
+- [x] DSN-style single-string config: `new IHDClient({ dsn: 'https://<key>@host' })`.
+
+**Deferred (noted, not yet built):**
+- [ ] **PII / redaction** (#4) — SDK `beforeSend(event)` hook + a server-side max
+  payload size; document that payloads are stored *and* sent to an LLM on
+  classify. Real liability once public (GDPR/PCI). *Highest-value remaining.*
+- [ ] **Ingest rate limiting / quota** (#5) — per-project limit at `/api/ingest`;
+  open signup + unbounded store is abusable today.
+- [ ] **`status` widening** (#7) — accept a non-operational `'info'` value (or make
+  `status` optional) so product/analytics events fit, without diluting the
+  "integration health" identity. A small, decision-first change.
+- [ ] **Batching / non-blocking transport** (#6) — batch ingest endpoint + client
+  buffer + `flush()`. This is the "Datadog-logger" thread; only bites at volume.
+- [ ] **OTel interoperability** (#8) — document the mapping (`integration≈service.name`,
+  `event_type≈event.name`, `severity≈severity_number`); long-term an OTLP-logs
+  ingest shim. The thing that makes it truly "general."
+- [ ] **Ownerless-project gap** (#10) — CLI projects ingest but their events belong
+  to no org, so nobody can view them. Attach to an org or document.
+- [ ] **Scale ceiling** (#9) — single SQLite file / one Fly machine is single-writer;
+  document the ceiling rather than pretend it scales horizontally.
+
+---
+
 ## 5. Build out each integration for a more illustrative IHD — ✅ adapter hook shipped (2026-07-19)
 
 Not a per-integration history/tracker — the goal is to flesh each host-app

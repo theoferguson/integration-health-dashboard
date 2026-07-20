@@ -46,16 +46,58 @@ export interface ReportResult {
   duplicate?: boolean;
 }
 
-export interface IHDClientOptions {
-  apiKey: string;
-  /** Base URL of the IHD deployment, e.g. https://integration-health-dashboard.fly.dev */
-  endpoint: string;
+interface IHDClientBaseOptions {
   /** Override for testing; defaults to the global fetch (Node 18+) */
   fetchImpl?: typeof fetch;
   /** Max retry attempts on transient failures. Default 3. */
   maxRetries?: number;
   /** Per-attempt timeout in ms - a stalled IHD aborts and retries. Default 10000. */
   timeoutMs?: number;
+}
+
+/**
+ * Configure with EITHER a single `dsn` connection string (Sentry-style, one
+ * value to copy) OR an explicit `apiKey` + `endpoint` pair.
+ */
+export type IHDClientOptions =
+  | (IHDClientBaseOptions & {
+      /**
+       * One-string config: `https://<apiKey>@<host>[/base-path]`. The API key is
+       * the URL userinfo; the endpoint is the rest. e.g.
+       * `https://proj_abc123@integration-health-dashboard.fly.dev`
+       */
+      dsn: string;
+      apiKey?: never;
+      endpoint?: never;
+    })
+  | (IHDClientBaseOptions & {
+      dsn?: never;
+      apiKey: string;
+      /** Base URL of the IHD deployment, e.g. https://integration-health-dashboard.fly.dev */
+      endpoint: string;
+    });
+
+/**
+ * Parse a DSN (`https://<apiKey>@<host>[/base-path]`) into an apiKey + endpoint.
+ * Throws on a malformed DSN - config errors should fail loudly at init, unlike
+ * report() which never throws.
+ */
+export function parseDsn(dsn: string): { apiKey: string; endpoint: string } {
+  let url: URL;
+  try {
+    url = new URL(dsn);
+  } catch {
+    throw new Error(`[ihd-sdk] invalid DSN (expected https://<apiKey>@host): ${dsn}`);
+  }
+  const apiKey = decodeURIComponent(url.username);
+  if (!apiKey) {
+    throw new Error(`[ihd-sdk] DSN is missing the API key (expected https://<apiKey>@host): ${dsn}`);
+  }
+  // Endpoint = scheme + host (+port) + any base path, without the userinfo. The
+  // report() path appends /api/ingest, so strip a trailing slash here.
+  const basePath = url.pathname.replace(/\/$/, '');
+  const endpoint = `${url.protocol}//${url.host}${basePath}`;
+  return { apiKey, endpoint };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -70,11 +112,23 @@ export class IHDClient {
   private readonly timeoutMs: number;
 
   constructor(options: IHDClientOptions) {
-    this.apiKey = options.apiKey;
-    this.endpoint = options.endpoint.replace(/\/$/, '');
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.maxRetries = options.maxRetries ?? 3;
-    this.timeoutMs = options.timeoutMs ?? 10000;
+    const o = options as IHDClientBaseOptions & {
+      dsn?: string;
+      apiKey?: string;
+      endpoint?: string;
+    };
+    const { apiKey, endpoint } = o.dsn
+      ? parseDsn(o.dsn)
+      : { apiKey: o.apiKey, endpoint: o.endpoint };
+
+    if (!apiKey) throw new Error('[ihd-sdk] apiKey (or dsn) is required');
+    if (!endpoint) throw new Error('[ihd-sdk] endpoint (or dsn) is required');
+
+    this.apiKey = apiKey;
+    this.endpoint = endpoint.replace(/\/$/, '');
+    this.fetchImpl = o.fetchImpl ?? fetch;
+    this.maxRetries = o.maxRetries ?? 3;
+    this.timeoutMs = o.timeoutMs ?? 10000;
   }
 
   /**

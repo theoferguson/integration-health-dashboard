@@ -1,446 +1,233 @@
 # Integration Health Dashboard
 
-An AI-native monitoring tool for third-party integrations, built to demonstrate full-stack TypeScript development, AI-assisted error classification, and construction-domain awareness.
-
-**[View Blueprint](./docs/blueprint.md)**
-
-## Problem
-
-Companies integrating with multiple external systems (CRMs, payroll, ERPs, payments) struggle to quickly triage integration failures. Engineers waste time manually classifying errors that follow predictable patterns, while non-technical stakeholders lack visibility into system health.
-
-In construction specifically, integration failures can have immediate business impact:
-- Payroll sync issues delay workers getting paid
-- Job costing gaps affect project profitability tracking
-- Card authorization failures stop field workers from purchasing materials
-- Compliance report failures risk regulatory penalties
-
-## Solution
-
-A dashboard that:
-- **Receives webhooks** from integrated systems (simulated for demo)
-- **Detects and logs failures** with full context
-- **Uses AI to classify errors** and suggest actionable fixes
-- **Shows integration health at a glance** for engineering and ops teams
-
-### Key Features
-
-- **System Health Overview** — Real-time status of all integrations with error resolution tracking
-- **Event Stream** — Chronological log of sync events and failures with resolution status indicators
-- **All Events View** — Paginated, filterable, sortable view of all events with CSV export
-- **AI Error Triage** — Click any failure to get AI-generated analysis, root cause, and suggested fix
-- **Data Sync Monitoring** — Track sync pipeline health across clients, view execution details, trigger manual syncs
-- **Construction Domain Awareness** — AI understands job costing, prevailing wage, certified payroll
-
-## Why AI (and Why Not Everywhere)
-
-This project demonstrates a deliberate approach to AI integration:
-
-| Layer | Technology | Why |
-|-------|------------|-----|
-| Detection | Deterministic logic | Failures should be caught reliably with clear rules |
-| Classification | AI (OpenAI GPT-4o-mini) | Pattern recognition across error types, context-aware suggestions |
-| Decision | Human | AI suggests, engineers and contractors decide and act |
-
-AI is a **force multiplier**, not a replacement for engineering judgment. The AI layer is:
-- Transparent (prompts are visible in code)
-- Tunable (easy to adjust for different domains)
-- Fallback-safe (mock classification when API unavailable)
-
-## Simulated Integrations
-
-The dashboard simulates 5 integrations relevant to construction contractor software:
-
-| Integration | Type | Data Flow |
-|------------|------|-----------|
-| **Procore** | Project Management | Jobs, cost codes, daily logs |
-| **Gusto** | Payroll | Employees, timecards, payroll runs |
-| **QuickBooks** | Accounting | Invoices, job costs, GL entries |
-| **Stripe Issuing** | Payments | Card authorizations, transactions |
-| **Certified Payroll** | Compliance | WH-347, LCPtracker, prevailing wage |
-
-Each integration includes realistic error scenarios: auth failures, rate limits, data validation, and domain-specific issues.
-
-## Data Sync Monitoring
-
-The dashboard includes a comprehensive sync monitoring system that tracks data synchronization across all client instances:
-
-### Sync Pipelines
-
-| Pipeline | Integration | Direction | Data Type |
-|----------|-------------|-----------|-----------|
-| Projects | Procore | Pull | Project data and metadata |
-| Cost Codes | Procore | Pull | Cost code structures |
-| Employees | Gusto | Pull | Employee records |
-| Timecards | Gusto | Pull | Time entries |
-| Invoices | QuickBooks | Pull | Invoice data |
-| GL Entries | QuickBooks | Push | Journal entries |
-| Transactions | Stripe Issuing | Pull | Card transactions |
-
-### Features
-
-- **System Overview** — Company-wide health metrics, sync rates, failing/stale instance counts
-- **Pipeline Health Table** — Success rates, instance counts, average durations per pipeline
-- **Failing Instances Alert** — Immediate visibility into sync failures with error details
-- **Per-Client Instance View** — Filter by client, status; view recent executions
-- **Execution Details** — Full request/response inspection, record counts, errors, warnings, and changes
-- **Manual Sync Trigger** — Trigger immediate sync for any instance
-
-## All Events View
-
-A comprehensive view for auditing and exporting all integration events:
-
-- **Pagination** — Browse through all events with configurable page sizes
-- **Filtering** — Filter by integration, status (success/failure), resolution status (open/acknowledged/resolved)
-- **Search** — Full-text search across event types, integrations, and error messages
-- **Sorting** — Sort by timestamp, integration, event type, or status
-- **CSV Export** — Export filtered events with full details for offline analysis
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | React + Vite + TypeScript |
-| Backend | Node + Express + TypeScript |
-| AI | OpenAI API (gpt-4o-mini) |
-| Styling | Tailwind CSS |
-| Deployment | Fly.io |
-
-## Project Structure
-
-```
-integration-health-dashboard/
-├── docs/
-│   └── blueprint.md              # Design document
-├── packages/
-│   ├── api/                      # Express backend
-│   │   └── src/
-│   │       ├── routes/           # Webhook receivers, events, integrations, sync
-│   │       ├── services/         # Event store, health calculator, AI classifier, sync store
-│   │       └── types/            # TypeScript types
-│   ├── web/                      # React frontend
-│   │   └── src/
-│   │       ├── components/       # Dashboard, EventStream, EventsView, ErrorTriage, DataSyncDashboard
-│   │       └── api/              # API client
-│   └── simulator/                # Webhook simulator
-│       └── src/scenarios/        # Per-integration test scenarios
-├── fly.toml                      # Deployment config
-└── package.json                  # Monorepo workspace config
-```
-
-## Running Locally
-
-### Prerequisites
-- Node.js 20+
-- npm 9+
-- OpenAI API key (optional, mock classification works without it)
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/theoferguson/integration-health-dashboard.git
-cd integration-health-dashboard
-
-# Install dependencies
-npm install
-
-# Set up environment (optional, for real AI classification)
-export OPENAI_API_KEY=your_key_here
-
-# Start the development servers
-npm run dev
-```
-
-This starts:
-- API server at http://localhost:3001
-- Frontend at http://localhost:5173
-
-### Running the Simulator
-
-```bash
-# Seed demo data (success events + errors for triage)
-npm run simulate -- --demo
-
-# Run all scenarios
-npm run simulate
-
-# Run scenarios for specific integration
-npm run simulate -- --integration procore
-```
-
-## Design Decisions
-
-### 1. TypeScript Everywhere
-Type safety across frontend, backend, and simulator. Shared types ensure consistency.
-
-### 2. In-Memory Event Store
-For this demo, events are stored in memory. In production, this would be replaced with SQLite (see roadmap below).
-
-### 3. Prompt Engineering as Code
-The AI classifier prompt is explicit and tunable. Construction domain knowledge is embedded directly in the system prompt, making it easy to adjust for different industries.
-
-### 4. Monorepo with Workspaces
-Single repository with npm workspaces for coordinated development while maintaining package boundaries.
-
-### 5. Minimal UI
-Clarity over polish. The dashboard prioritizes information density and actionability over visual flourish.
-
----
-
-## Roadmap — Evolving into a General Observability Tool
-
-The current dashboard is a high-quality demo with simulated data. The next phase expands it into a lightweight, self-hosted observability platform — a minimal Sentry/Datadog that any codebase can instrument against via an SDK.
-
-### Why this direction
-
-The architecture is already right. The event model, triage workflow, AI classification, and sync monitoring are all production-quality. What's missing is:
-1. Persistent storage so data survives server restarts
-2. A way for real applications to send events to the dashboard
-3. Project isolation so multiple codebases can be monitored independently
-
-### Phase 1 — Persistent storage (SQLite)
-
-**Goal:** Events survive restarts. Dashboard becomes genuinely useful, not just a demo.
-
-Replace the in-memory `EventStore` with `better-sqlite3`. SQLite is the right choice here — no separate database service, single file on disk, fast enough for thousands of events, and Fly.io supports persistent volumes natively.
-
-Schema:
-
-```sql
-CREATE TABLE projects (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  api_key TEXT UNIQUE NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE events (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  integration TEXT NOT NULL,
-  event_type TEXT NOT NULL,
-  status TEXT NOT NULL,
-  timestamp INTEGER NOT NULL,
-  payload TEXT NOT NULL,      -- JSON
-  error TEXT,                 -- JSON
-  classification TEXT,        -- JSON
-  resolution TEXT,            -- JSON
-  FOREIGN KEY (project_id) REFERENCES projects(id)
-);
-
-CREATE INDEX idx_events_project_time ON events(project_id, timestamp DESC);
-CREATE INDEX idx_events_status ON events(project_id, status);
-```
-
-**Changes required:**
-- Swap `EventStore` service (same interface, different backing)
-- Add `projects` table and lightweight key management endpoint
-- Mount a Fly.io persistent volume at `/data`
-- Update `fly.toml` with volume config
-
-**Effort:** ~1 day
-
----
-
-### Phase 2 — Generic ingestion endpoint
-
-**Goal:** Accept events from any application, not just the simulated construction integrations.
-
-Add a new route `POST /api/ingest` that accepts a general-purpose event payload authenticated by API key:
-
-```ts
-// Request body
-{
-  integration: string,      // e.g. "stripe", "auth", "database", or any label
-  event_type: string,       // e.g. "payment.failed", "login.error"
-  status: "success" | "failure" | "pending",
-  payload: Record<string, unknown>,
-  error?: {
-    message: string,
-    code?: string,
-    stack?: string,
-    context?: Record<string, unknown>
-  }
-}
-
-// Auth header
-Authorization: Bearer proj_xxxxxxxxxxxx
-```
-
-The existing construction-specific webhook routes (`/api/webhooks/procore`, etc.) stay as-is and power the demo mode. The new `/api/ingest` endpoint is the generic entry point for SDK usage.
-
-**Effort:** ~half day
-
----
-
-### Phase 3 — SDK package (`packages/sdk`)
-
-**Goal:** A small npm package developers drop into their applications to start sending events to the dashboard.
+A self-hosted, general-purpose observability dashboard for third-party
+integrations — a minimal, AI-assisted Sentry/Datadog that **any** application can
+report to. Apps send events over an SDK (or a plain `POST /api/ingest`); the
+dashboard shows integration health at a glance, AI-classifies failures on demand,
+and lets teams graph and triage what matters.
+
+**[Original design doc (historical)](./docs/blueprint.md)** ·
+**[Roadmap](./ROADMAP.md)**
+
+## What it does
+
+- **Ingest from anywhere.** Any codebase reports events with an API key —
+  `POST /api/ingest` or the [`@theof/ihd-sdk`](./packages/sdk) package. Integration
+  and event-type names are free-form; nothing is hardcoded to a particular domain.
+- **Health at a glance.** Per-integration cards (healthy / degraded / down),
+  success rates, recent-event stream, and trend sparklines from reported metrics.
+- **All Events.** Paginated, filterable (integration / status / resolution),
+  searchable, sortable, with CSV export.
+- **Monitors.** Datadog-style saved event queries rendered as time-series graphs
+  of the matching events — filter by integration/type/status plus predicates over
+  `metrics.*`, `tags.*`, `payload.*`, `severity`, `environment`.
+- **AI error triage.** Click any failure for an AI-generated category, severity,
+  root cause, and suggested fix; then acknowledge / resolve / reopen. Falls back
+  to a deterministic mock classifier when no OpenAI key is set.
+- **Multi-tenant.** GitHub-OAuth sign-in with open signup; each user gets an org,
+  projects are org-scoped, members read and admins manage.
+
+A companion repo, **`integrations-host-app`**, is a real reporter that exercises
+this end to end (weather, NYT, NYC campaign-finance adapters emitting live events).
+
+## The event model
+
+Events are the one thing integrators send. All fields below the line are optional
+(`schemaVersion` 2); a v1 reporter simply omits them and still works.
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `integration` | ✓ | Free-form label for the thing reporting, e.g. `stripe`, `weather`. |
+| `event_type` | ✓ | Free-form, e.g. `payment.failed`, `forecast.sync`. |
+| `status` | ✓ | `success` \| `failure` \| `pending`. Drives the health rollup. |
+| `payload` | — | Arbitrary context object (stored as JSON). |
+| `error` | — | `{ message*, code?, context? }` — AI-classified when `status` is `failure`. |
+| `idempotency_key` | — | Per-project dedupe; the SDK auto-generates one per send. |
+| `metrics` | — | `Record<string, number>` — numeric measures for trends / monitor predicates. |
+| `tags` | — | `Record<string, string>` — labels for filtering / grouping. |
+| `environment` | — | `prod` / `staging` / … |
+| `severity` | — | `low` \| `medium` \| `high` \| `critical` (reporter-supplied). |
+| `source` | — | Reporter identity, e.g. `my-api@1.4.0`. |
+
+The server assigns each event a time-sortable UUIDv7 `id` and `timestamp`; `id`
+is never sent by the client. See [`docs/DESIGN-monitors-and-event-data.md`](./docs/DESIGN-monitors-and-event-data.md).
+
+## Reporting events
+
+### With the SDK
 
 ```bash
 npm install @theof/ihd-sdk
 ```
-
-#### Node.js / Express
 
 ```ts
 import { IHDClient } from '@theof/ihd-sdk'
 
-const monitor = new IHDClient({
-  apiKey: process.env.IHD_API_KEY,
-  endpoint: 'https://integration-health-dashboard.fly.dev',
-  project: 'my-api'
+// DSN is `https://<apiKey>@<host>`; the key comes from `npm run create-project`.
+const monitor = new IHDClient({ dsn: process.env.IHD_DSN! })
+
+await monitor.report({
+  integration: 'stripe',
+  eventType: 'payout.sync',
+  status: 'success',
+  metrics: { latencyMs: 214, itemCount: 12 },
 })
 
-// Auto-capture unhandled Express errors
-app.use(monitor.expressMiddleware())
-
-// Manual capture anywhere
 try {
   await syncPayroll()
 } catch (err) {
-  monitor.capture(err, {
-    integration: 'gusto',
-    event_type: 'payroll.sync',
-    context: { clientId, payPeriod }
-  })
+  await monitor.captureError(err, { integration: 'gusto', eventType: 'payroll.sync' })
 }
+
+// Express: auto-capture unhandled route errors
+app.use(monitor.expressMiddleware('my-api'))
 ```
 
-#### React
+`report()` and `captureError()` never throw — they resolve to `{ ok: false }`
+after retries, so a flaky IHD never breaks the caller. See the
+[SDK README](./packages/sdk/README.md) for the full surface.
 
-```tsx
-import { IHDErrorBoundary } from '@theof/ihd-sdk/react'
-
-// Wraps your app — captures unhandled React errors
-<IHDErrorBoundary client={monitor}>
-  <App />
-</IHDErrorBoundary>
-```
-
-#### SDK internals
-
-- Batches events and flushes every 2s (or immediately on error)
-- Fire-and-forget by default — never blocks the calling process
-- Retries failed sends up to 3 times with exponential backoff
-- TypeScript-native with full type exports
-- Zero required dependencies (uses `fetch`, available in Node 18+)
-
-**Effort:** ~1–2 days
-
----
-
-### Phase 4 — Dashboard UI adjustments
-
-**Goal:** Surface project-level data and make the dashboard useful for generic apps, not just the construction demo.
-
-- **Project switcher** — dropdown to switch between monitored projects
-- **Generic integration labels** — "auth", "database", "payments" alongside existing construction labels
-- **Demo mode toggle** — button to seed the existing construction scenarios for showcase purposes
-- **API key management page** — create/revoke keys, view project usage
-
-**Effort:** ~half day
-
----
-
-### Total scope
-
-| Phase | Description | Effort |
-|-------|-------------|--------|
-| 1 | SQLite persistence + Fly volume | ~1 day |
-| 2 | Generic `/api/ingest` endpoint | ~half day |
-| 3 | SDK package (Node + React) | ~1–2 days |
-| 4 | Dashboard UI adjustments | ~half day |
-| **Total** | | **~3–4 days** |
-
----
-
-### What this enables
-
-Once complete, any project can be instrumented in under 5 minutes:
+### Or with a raw request
 
 ```bash
-npm install @theof/ihd-sdk
+curl -X POST https://integration-health-dashboard.fly.dev/api/ingest \
+  -H "Authorization: Bearer proj_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schemaVersion": 2,
+    "integration": "stripe",
+    "event_type": "payout.sync",
+    "status": "success",
+    "metrics": { "latencyMs": 214 }
+  }'
 ```
 
-```ts
-const monitor = new IHDClient({ apiKey: 'proj_xxx', endpoint: '...' })
-app.use(monitor.expressMiddleware())
+Responses: `201 { event, duplicate: false }` on create, `200 { …, duplicate: true }`
+on an idempotency hit, `400` with a specific message on a bad body, `401` on a
+missing/invalid key.
+
+## Why AI (and why not everywhere)
+
+| Layer | Technology | Why |
+|-------|------------|-----|
+| Detection | Deterministic logic | Failures are caught by clear rules, reliably. |
+| Classification | AI (OpenAI gpt-4o-mini) | Pattern recognition + context-aware fix suggestions across error types. |
+| Decision | Human | AI suggests; engineers acknowledge / resolve. |
+
+The classifier prompt is explicit in code (`services/classifier.ts`), tunable, and
+fallback-safe (a deterministic mock runs when no API key is set). It reasons from
+the error message rather than assuming what any integration is for, so it works
+for arbitrary reporters.
+
+## Tech stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React + Vite + TypeScript + Tailwind |
+| Backend | Node + Express + TypeScript |
+| Storage | SQLite (`better-sqlite3`, WAL) on a Fly volume |
+| AI | OpenAI API (gpt-4o-mini), mock fallback |
+| Deployment | Fly.io |
+
+## Project structure
+
+```
+integration-health-dashboard/
+├── docs/                          # blueprint (historical), design docs
+├── packages/
+│   ├── api/     src/routes,services,db,middleware   # Express backend + SQLite
+│   ├── web/     src/components,hooks,api             # React dashboard
+│   ├── sdk/     src/index.ts                         # @theof/ihd-sdk
+│   └── shared/  src/types,constants                  # shared types
+├── ROADMAP.md
+├── fly.toml
+└── package.json                   # npm-workspace monorepo
 ```
 
-Events flow into the dashboard, get AI-classified on demand, and can be triaged, acknowledged, and resolved by the team. The construction demo remains as a showcase of domain-specific capability.
+## Running locally
 
----
+Prerequisites: Node 20+, npm 9+. OpenAI key optional (mock classification works
+without it).
 
-## Accounts & Projects
+```bash
+git clone https://github.com/theoferguson/integration-health-dashboard.git
+cd integration-health-dashboard
+npm install
 
-Sign-in is GitHub OAuth with **open signup** - anyone with a GitHub account
-can sign in and create their own projects. Each project is an API key scoped
-to whoever created it; the "Projects" tab lists (and lets you delete) only
-your own, never anyone else's. This is what makes IHD an actual multi-tenant
-platform rather than a single-operator tool - any project, yours or someone
-else's, can report in via `POST /api/ingest` once it has a key.
+# optional, for real AI classification
+export OPENAI_API_KEY=your_key_here
 
-The CLI script (`npm run create-project`) still works standalone for
-scripting/bootstrapping - it creates an ownerless project not tied to any
-account, which is fine for ingest (auth there is by API key, not by owner)
-but won't show up in anyone's "Projects" list.
+npm run dev          # API on :3001, web on :5173
+```
+
+Create a project (API key) to report against:
+
+```bash
+npm run create-project -- --name "my-app"   # prints an API key once — save it
+```
+
+Then send events with that key via the SDK or the `curl` above, or point the
+companion `integrations-host-app` at your local IHD.
+
+## Accounts & projects
+
+Sign-in is GitHub OAuth with **open signup** — anyone with a GitHub account can
+sign in and create projects. Each project is an API key scoped to the creator's
+org; the Projects tab lists (and deletes) only your own. Any project with a key
+can report in via `POST /api/ingest`.
+
+The CLI script (`npm run create-project`) also works standalone for
+scripting/bootstrapping — it creates an *ownerless* project (fine for ingest,
+but it won't appear in anyone's Projects list, since it has no org).
 
 ### Setting up the GitHub OAuth App
 
 One-time step on your own GitHub account:
 
-1. Go to [github.com/settings/developers](https://github.com/settings/developers) → **OAuth Apps** → **New OAuth App**.
-2. Homepage URL: `http://localhost:5173` for local dev, or your Fly app's URL in production.
-3. **Authorization callback URL**: `http://localhost:3001/api/auth/callback` locally, or `https://<your-app>.fly.dev/api/auth/callback` in production. GitHub requires an exact match - use two separate OAuth Apps (dev/prod) rather than switching one back and forth.
-4. Generate a client secret, then fill in `.env`: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `SESSION_SECRET` (see `.env.example` for how to generate it).
+1. [github.com/settings/developers](https://github.com/settings/developers) →
+   **OAuth Apps** → **New OAuth App**.
+2. Homepage URL: `http://localhost:5173` (dev) or your Fly app URL (prod).
+3. **Authorization callback URL**: `http://localhost:3001/api/auth/callback` (dev)
+   or `https://<your-app>.fly.dev/api/auth/callback` (prod). GitHub requires an
+   exact match — use separate dev/prod OAuth Apps.
+4. Fill in `.env`: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`,
+   `SESSION_SECRET` (see `.env.example`).
 
-## Deployment
-
-### Deploy to Fly.io
+## Deployment (Fly.io)
 
 ```bash
-# Install Fly CLI
 brew install flyctl
-
-# Login
 fly auth login
 
 fly apps create integration-health-dashboard
 fly volumes create ihd_data --size 1 -a integration-health-dashboard --region sjc
 
 # optional secrets
-fly secrets set OPENAI_API_KEY=... GITHUB_OAUTH_CLIENT_ID=... GITHUB_OAUTH_CLIENT_SECRET=... SESSION_SECRET=... -a integration-health-dashboard
+fly secrets set OPENAI_API_KEY=... GITHUB_OAUTH_CLIENT_ID=... \
+  GITHUB_OAUTH_CLIENT_SECRET=... SESSION_SECRET=... -a integration-health-dashboard
 
-npm run build   # packages/web/dist must exist locally - the Dockerfile copies
-                # it rather than building it
+npm run build   # packages/web/dist must exist — the Dockerfile copies it
 fly deploy
 ```
 
-The volume has to exist before the first deploy - `fly deploy` won't
-auto-create it from `fly.toml`'s `[[mounts]]` block. Without it, every
-restart/redeploy wipes all projects and events (Fly Machines don't persist
-local disk by default).
+The volume must exist before the first deploy (`fly deploy` won't create it from
+`fly.toml`'s `[[mounts]]`); without it, every redeploy wipes projects and events.
 
-### Environment Variables
+### Environment variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for AI classification | No (mock fallback) |
-| `PORT` | Server port | No (defaults to 3001 locally, 8080 in prod) |
-| `DB_PATH` | SQLite file path | No (defaults to `./data/ihd.db`; set to a mounted volume path in production) |
-| `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App credentials | Only for sign-in/project management |
+| `OPENAI_API_KEY` | AI classification | No (mock fallback) |
+| `PORT` | Server port | No (3001 local, 8080 prod) |
+| `DB_PATH` | SQLite file path | No (`./data/ihd.db`; set to the mounted volume in prod) |
+| `EVENT_RETENTION_DAYS` | Days before events are swept | No (default 60) |
+| `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App | Only for sign-in |
 | `SESSION_SECRET` | Signs the session cookie | Only for sign-in (insecure dev default otherwise) |
-
----
 
 ## About
 
-Built by **Theo Ferguson** as a portfolio project demonstrating:
-
-- **AI-native development** — Using LLMs as infrastructure, not magic
-- **Full-stack ownership** — Backend, frontend, deployment, documentation
-- **Domain awareness** — Construction software integrations (payroll, job costing, compliance)
-- **Production thinking** — Error handling, graceful degradation, observability
-
----
+Built by **Theo Ferguson** as a portfolio project demonstrating full-stack
+TypeScript, AI-native development (LLMs as infrastructure, not magic), and
+production thinking (error handling, graceful degradation, multi-tenancy). It
+began as a construction-integrations demo; the classifier's domain awareness is
+tunable, but the platform itself is domain-agnostic.

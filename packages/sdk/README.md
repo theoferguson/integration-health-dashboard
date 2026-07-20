@@ -13,10 +13,15 @@ npm install @theof/ihd-sdk
 ```ts
 import { IHDClient } from '@theof/ihd-sdk'
 
-const monitor = new IHDClient({
-  apiKey: process.env.IHD_API_KEY!,      // from `npm run create-project` in the IHD repo
-  endpoint: 'https://integration-health-dashboard.fly.dev',
-})
+// One-string config (recommended). The DSN is `https://<apiKey>@<host>`;
+// the API key comes from `npm run create-project` in the IHD repo.
+const monitor = new IHDClient({ dsn: process.env.IHD_DSN! })
+
+// ...or pass the two pieces explicitly:
+// const monitor = new IHDClient({
+//   apiKey: process.env.IHD_API_KEY!,
+//   endpoint: 'https://integration-health-dashboard.fly.dev',
+// })
 
 // Report a successful sync
 await monitor.report({
@@ -51,3 +56,6 @@ app.use(monitor.expressMiddleware('my-app'))
 - In a short-lived process (e.g. a scheduled job that exits after one run),
   `await` the call so the send completes before the process exits.
 - Requires Node 18+ (uses the global `fetch`). Zero runtime dependencies.
+- Configure with a single `dsn` string (`https://<apiKey>@<host>`) or an explicit
+  `apiKey` + `endpoint` pair. A malformed DSN throws at construction (config
+  errors should fail loudly), unlike `report()`, which never throws.
