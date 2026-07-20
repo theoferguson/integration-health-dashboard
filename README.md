@@ -52,6 +52,13 @@ Events are the one thing integrators send. All fields below the line are optiona
 The server assigns each event a time-sortable UUIDv7 `id` and `timestamp`; `id`
 is never sent by the client. See [`docs/DESIGN-monitors-and-event-data.md`](./docs/DESIGN-monitors-and-event-data.md).
 
+> **Data handling.** `payload`, `tags`, and `error.context` are stored as sent,
+> and a failure's `error` is sent to OpenAI when someone classifies it. Scrub
+> sensitive data before it leaves your process with the SDK's
+> [`beforeSend`](./packages/sdk/README.md#redacting-data-beforesend) hook.
+> `payload` is capped at 32 KB at the ingest boundary; events age out after
+> `EVENT_RETENTION_DAYS` (default 60).
+
 ## Reporting events
 
 ### With the SDK

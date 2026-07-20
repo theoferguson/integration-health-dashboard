@@ -1,6 +1,6 @@
 {
   "name": "@theof/ihd-sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Client SDK for reporting integration events to Integration Health Dashboard",
   "license": "MIT",
   "type": "module",

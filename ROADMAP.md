@@ -22,11 +22,12 @@ uncoupled.
   `monitor.capture`/React/2s-batching — that was never built). `blueprint.md`
   marked historical.
 - [x] DSN-style single-string config: `new IHDClient({ dsn: 'https://<key>@host' })`.
+- [x] **PII / redaction** (#4, 2026-07-20) — SDK `beforeSend(event)` hook (redact or
+  return null to drop; a throwing hook drops rather than sends unredacted) +
+  32 KB server-side `payload` cap at ingest. Data-handling documented in both
+  READMEs. SDK **0.4.0**.
 
 **Deferred (noted, not yet built):**
-- [ ] **PII / redaction** (#4) — SDK `beforeSend(event)` hook + a server-side max
-  payload size; document that payloads are stored *and* sent to an LLM on
-  classify. Real liability once public (GDPR/PCI). *Highest-value remaining.*
 - [ ] **Ingest rate limiting / quota** (#5) — per-project limit at `/api/ingest`;
   open signup + unbounded store is abusable today.
 - [ ] **`status` widening** (#7) — accept a non-operational `'info'` value (or make

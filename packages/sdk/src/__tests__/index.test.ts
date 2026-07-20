@@ -219,6 +219,57 @@ describe('IHDClient', () => {
     });
   });
 
+  describe('beforeSend', () => {
+    const base = { integration: 'weather', eventType: 'sync', status: 'success' as const };
+
+    it('redacts fields before they leave the process', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, {}));
+      const client = new IHDClient({
+        apiKey: 'k',
+        endpoint: 'https://ihd.example.com',
+        fetchImpl,
+        beforeSend: (e) => ({ ...e, payload: { ...e.payload, email: '[redacted]' } }),
+      });
+
+      await client.report({ ...base, payload: { email: 'user@example.com', ok: 1 } });
+
+      const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+      expect(body.payload).toEqual({ email: '[redacted]', ok: 1 });
+    });
+
+    it('drops the event (no send) when beforeSend returns null', async () => {
+      const fetchImpl = vi.fn();
+      const client = new IHDClient({
+        apiKey: 'k',
+        endpoint: 'https://ihd.example.com',
+        fetchImpl,
+        beforeSend: () => null,
+      });
+
+      const result = await client.report(base);
+
+      expect(result).toEqual({ ok: true, dropped: true });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('drops the event unsent (not silently sent) when beforeSend throws', async () => {
+      const fetchImpl = vi.fn();
+      const client = new IHDClient({
+        apiKey: 'k',
+        endpoint: 'https://ihd.example.com',
+        fetchImpl,
+        beforeSend: () => {
+          throw new Error('redaction failed');
+        },
+      });
+
+      const result = await client.report(base);
+
+      expect(result).toEqual({ ok: false, dropped: true });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+  });
+
   describe('expressMiddleware', () => {
     it('should capture the error and call next(err)', async () => {
       const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, {}));

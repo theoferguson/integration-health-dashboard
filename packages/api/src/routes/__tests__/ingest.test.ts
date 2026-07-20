@@ -56,6 +56,16 @@ describe('POST /api/ingest', () => {
     expect(response.body.error).toContain('schemaVersion');
   });
 
+  it('should reject a payload over the size limit', async () => {
+    const response = await request(app)
+      .post('/api/ingest')
+      .set('Authorization', `Bearer ${project.apiKey}`)
+      .send({ ...validBody, payload: { blob: 'x'.repeat(33 * 1024) } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('payload exceeds');
+  });
+
   it('should reject an invalid status value', async () => {
     const response = await request(app)
       .post('/api/ingest')

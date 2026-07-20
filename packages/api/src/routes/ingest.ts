@@ -7,6 +7,11 @@ const router = Router();
 
 const SEVERITIES: ErrorSeverity[] = ['low', 'medium', 'high', 'critical'];
 
+// Cap the arbitrary payload blob at the trust boundary - bounds storage and
+// blunts abuse (open signup + unbounded store). The whole request is also
+// limited by express.json()'s default 100kb; this is the per-field guard.
+const MAX_PAYLOAD_BYTES = 32 * 1024;
+
 interface IngestBody {
   integration: string;
   eventType: string;
@@ -51,6 +56,9 @@ function parseIngestBody(body: unknown): ParseResult {
     (typeof b.payload !== 'object' || b.payload === null || Array.isArray(b.payload))
   ) {
     return { ok: false, message: 'payload must be an object' };
+  }
+  if (b.payload !== undefined && Buffer.byteLength(JSON.stringify(b.payload), 'utf8') > MAX_PAYLOAD_BYTES) {
+    return { ok: false, message: `payload exceeds the ${MAX_PAYLOAD_BYTES}-byte limit` };
   }
 
   let error: EventError | undefined;

@@ -46,6 +46,25 @@ try {
 app.use(monitor.expressMiddleware('my-app'))
 ```
 
+## Redacting data (`beforeSend`)
+
+IHD stores `payload`, `tags`, and `error.context` as sent, and a failure's
+`error` is sent to an LLM when someone clicks "classify". Scrub anything
+sensitive before it leaves your process with `beforeSend` — return a modified
+event to send it, or `null` to drop it:
+
+```ts
+const monitor = new IHDClient({
+  dsn: process.env.IHD_DSN!,
+  beforeSend(event) {
+    if (event.tags?.internal === 'true') return null           // drop entirely
+    return { ...event, payload: { ...event.payload, email: undefined } } // redact
+  },
+})
+```
+
+If `beforeSend` throws, the event is dropped rather than sent unredacted.
+
 ## Notes
 
 - `report()` and `captureError()` never throw. They resolve to `{ ok: false }`

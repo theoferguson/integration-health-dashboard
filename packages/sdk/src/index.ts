@@ -44,7 +44,17 @@ export interface ReportResult {
   ok: boolean;
   /** True if the server recognized this as a retry of an earlier report() */
   duplicate?: boolean;
+  /** True if the event was not sent because `beforeSend` dropped it. */
+  dropped?: boolean;
 }
+
+/**
+ * Inspect / redact / drop an event just before it's sent. Return a (possibly
+ * modified) event to send it, or `null`/`undefined` to drop it entirely. Use it
+ * to scrub PII from `payload`/`tags`/`error.context` before it leaves the
+ * process. If it throws, the event is dropped (never sent unredacted).
+ */
+export type BeforeSend = (event: ReportInput) => ReportInput | null | undefined;
 
 interface IHDClientBaseOptions {
   /** Override for testing; defaults to the global fetch (Node 18+) */
@@ -53,6 +63,8 @@ interface IHDClientBaseOptions {
   maxRetries?: number;
   /** Per-attempt timeout in ms - a stalled IHD aborts and retries. Default 10000. */
   timeoutMs?: number;
+  /** Redaction / drop hook run on every event before it's sent. See {@link BeforeSend}. */
+  beforeSend?: BeforeSend;
 }
 
 /**
@@ -110,6 +122,7 @@ export class IHDClient {
   private readonly fetchImpl: typeof fetch;
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
+  private readonly beforeSend?: BeforeSend;
 
   constructor(options: IHDClientOptions) {
     const o = options as IHDClientBaseOptions & {
@@ -129,6 +142,7 @@ export class IHDClient {
     this.fetchImpl = o.fetchImpl ?? fetch;
     this.maxRetries = o.maxRetries ?? 3;
     this.timeoutMs = o.timeoutMs ?? 10000;
+    this.beforeSend = o.beforeSend;
   }
 
   /**
@@ -139,21 +153,34 @@ export class IHDClient {
    * scheduled job) should `await` it before exiting so the send completes.
    */
   async report(input: ReportInput): Promise<ReportResult> {
-    const idempotencyKey = input.idempotencyKey ?? randomUUID();
+    let event = input;
+    if (this.beforeSend) {
+      try {
+        const result = this.beforeSend(input);
+        if (!result) return { ok: true, dropped: true }; // caller chose to drop it
+        event = result;
+      } catch (err) {
+        // A throwing redaction hook must not send unredacted data - drop and log.
+        console.error('[ihd-sdk] beforeSend threw; dropping event unsent:', err);
+        return { ok: false, dropped: true };
+      }
+    }
+
+    const idempotencyKey = event.idempotencyKey ?? randomUUID();
     const body = JSON.stringify({
       schemaVersion: SCHEMA_VERSION,
-      integration: input.integration,
-      event_type: input.eventType,
-      status: input.status,
-      payload: input.payload ?? {},
-      error: input.error,
+      integration: event.integration,
+      event_type: event.eventType,
+      status: event.status,
+      payload: event.payload ?? {},
+      error: event.error,
       idempotency_key: idempotencyKey,
       // Optional schemaVersion 2 dimensions - undefined ones are omitted by JSON.
-      metrics: input.metrics,
-      tags: input.tags,
-      environment: input.environment,
-      severity: input.severity,
-      source: input.source,
+      metrics: event.metrics,
+      tags: event.tags,
+      environment: event.environment,
+      severity: event.severity,
+      source: event.source,
     });
 
     let lastError: unknown;
