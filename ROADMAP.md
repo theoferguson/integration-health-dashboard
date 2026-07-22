@@ -28,9 +28,14 @@ uncoupled.
   32 KB server-side `payload` cap at ingest. Data-handling documented in both
   READMEs. SDK **0.4.0**.
 
+**Done (2026-07-21):**
+- [x] **Ingest rate limiting** (#5) — `express-rate-limit` on `/api/ingest`, keyed
+  by project API key (per-IP fallback for missing/invalid keys), default 120/min
+  via `INGEST_RATE_LIMIT_PER_MIN`, emits IETF `RateLimit-*` headers, returns 429.
+  `middleware/rateLimit.ts`. Per-project metering self-checked in
+  `routes/__tests__/ingestRateLimit.test.ts`.
+
 **Deferred (noted, not yet built):**
-- [ ] **Ingest rate limiting / quota** (#5) — per-project limit at `/api/ingest`;
-  open signup + unbounded store is abusable today.
 - [ ] **`status` widening** (#7) — accept a non-operational `'info'` value (or make
   `status` optional) so product/analytics events fit, without diluting the
   "integration health" identity. A small, decision-first change.

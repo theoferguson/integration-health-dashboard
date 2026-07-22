@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { getProjectByApiKey } from '../services/projectStore.js';
 import { createEvent, findEventByIdempotencyKey } from '../services/eventStore.js';
+import { ingestRateLimiter } from '../middleware/rateLimit.js';
 import type { EventError, EventStatus, ErrorSeverity } from '../types/index.js';
 
 const router = Router();
+
+router.use(ingestRateLimiter);
 
 const SEVERITIES: ErrorSeverity[] = ['low', 'medium', 'high', 'critical'];
 

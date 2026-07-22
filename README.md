@@ -111,7 +111,8 @@ curl -X POST https://integration-health-dashboard.fly.dev/api/ingest \
 
 Responses: `201 { event, duplicate: false }` on create, `200 { …, duplicate: true }`
 on an idempotency hit, `400` with a specific message on a bad body, `401` on a
-missing/invalid key.
+missing/invalid key, `429` once a project exceeds its per-minute ingest budget
+(`RateLimit-*` headers say when to retry).
 
 ## Why AI (and why not everywhere)
 
@@ -228,6 +229,7 @@ The volume must exist before the first deploy (`fly deploy` won't create it from
 | `PORT` | Server port | No (3001 local, 8080 prod) |
 | `DB_PATH` | SQLite file path | No (`./data/ihd.db`; set to the mounted volume in prod) |
 | `EVENT_RETENTION_DAYS` | Days before events are swept | No (default 60) |
+| `INGEST_RATE_LIMIT_PER_MIN` | Max ingest requests per project per minute | No (default 120) |
 | `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App | Only for sign-in |
 | `SESSION_SECRET` | Signs the session cookie | Only for sign-in (insecure dev default otherwise) |
 
