@@ -16,8 +16,8 @@ uncoupled.
 
 **Done (2026-07-20):**
 - [x] Publish the SDK properly — `publishConfig.access=public`, `prepublishOnly`
-  build. **0.3.0 is published** (DSN); **0.4.0 (beforeSend, below) is committed
-  but not yet published** — publish it to reconcile the READMEs with npm.
+  build. **`@theof/ihd-sdk@0.4.0` is published** (DSN config + `beforeSend`); npm
+  and the READMEs are in sync.
 - [x] Reconcile the README with the shipped product (it described a construction
   demo, a nonexistent `simulator`, an in-memory store, and an SDK API —
   `monitor.capture`/React/2s-batching — that was never built). `blueprint.md`
@@ -28,12 +28,13 @@ uncoupled.
   32 KB server-side `payload` cap at ingest. Data-handling documented in both
   READMEs. SDK **0.4.0**.
 
-**Done (2026-07-21):**
+**Done (2026-07-21, deployed 2026-07-22):**
 - [x] **Ingest rate limiting** (#5) — `express-rate-limit` on `/api/ingest`, keyed
   by project API key (per-IP fallback for missing/invalid keys), default 120/min
   via `INGEST_RATE_LIMIT_PER_MIN`, emits IETF `RateLimit-*` headers, returns 429.
   `middleware/rateLimit.ts`. Per-project metering self-checked in
-  `routes/__tests__/ingestRateLimit.test.ts`.
+  `routes/__tests__/ingestRateLimit.test.ts`. Merged via PR #1 (`3b3860e`) and
+  **live in prod** (Fly release v21) — verified `ratelimit-policy: 120;w=60`.
 
 **Deferred (noted, not yet built):**
 - [ ] **`status` widening** (#7) — accept a non-operational `'info'` value (or make
@@ -145,8 +146,8 @@ bucketed graph query (`monitorStore.ts`), `/api/monitors` routes (member read /
 admin write), and a **Monitors** tab (list with 24h match badge + enable/delete,
 create form with a predicate builder, expandable bar-chart graph over 24h/7d/30d).
 
-**Deploy:** IHD-only; the `monitors` table is created on boot (`CREATE IF NOT
-EXISTS`). No SDK/host change. Push + `fly deploy -a integration-health-dashboard`.
+**Deploy:** ✅ live in prod (Fly release v21, 2026-07-22). IHD-only; the
+`monitors` table is created on boot (`CREATE IF NOT EXISTS`). No SDK/host change.
 
 **Scope cuts (v1) — deferred:**
 - No notifications/firings yet (graph is the artifact). In-app alert layer is a
