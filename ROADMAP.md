@@ -60,6 +60,35 @@ Depends on / benefits from: #7 (`status` widening — agent/analytics events),
 
 ---
 
+## 12. API architecture + security hardening
+
+Cross-cutting priority raised alongside Door 2 (#11): as IHD grows a public
+programmatic surface, the API needs best-practice structure and hardening as a
+first-class concern, not per-route patches.
+
+**Architecture:**
+- [ ] Versioned, stable read surface (`/api/v1/*`) with a **consistent response
+  envelope** and error shape (`{ error: { code, message } }`) across endpoints.
+- [ ] Uniform **pagination + filtering** conventions shared by the web and API
+  readers (don't fork query semantics).
+- [ ] Documented contract — README reference now; typed client / OpenAPI later.
+
+**Security / hardening:**
+- [ ] Scoped, **revocable, hashed** API tokens (read-only, distinct from the
+  ingest key and the session) with `last_used_at` for auditing. *(Lands with #11.)*
+- [ ] **Rate-limit the read API** (reuse `express-rate-limit`, keyed by token).
+- [ ] **Security headers** via `helmet`.
+- [ ] **Tighten CORS** from the current wide-open `app.use(cors())` to an
+  allowlist (carried from the 2026-07-17 review; low-severity while pre-public).
+- [ ] **Query-param validation + bounds** (limit clamping, enum checks) at the
+  trust boundary, 400 with a specific message.
+- [ ] API errors never leak internals (stack traces / SQL) to callers.
+
+Lands incrementally: hashed tokens, read rate-limit, error envelope, and query
+validation ship with #11; helmet, the CORS allowlist, and OpenAPI are fast-follow.
+
+---
+
 ## 6. General-purpose hardening — make IHD a credible public tool
 
 From a 2026-07-20 review of the public contract against observability

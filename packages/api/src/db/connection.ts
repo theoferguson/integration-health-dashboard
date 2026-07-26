@@ -85,6 +85,23 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_monitors_org ON monitors(org_id);
+
+  -- Read tokens: org-scoped, read-only credentials for the /api/v1 programmatic
+  -- surface (Door 2). Distinct from a project's ingest api_key and from the
+  -- browser session. Only the SHA-256 hash is stored - the secret is shown once
+  -- at creation. 'prefix' is a non-secret snippet for display in the UI/CLI.
+  CREATE TABLE IF NOT EXISTS read_tokens (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id),
+    name TEXT NOT NULL,
+    token_hash TEXT UNIQUE NOT NULL,
+    prefix TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER,
+    revoked_at INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_read_tokens_org ON read_tokens(org_id);
 `);
 
 // CREATE TABLE IF NOT EXISTS is a no-op against a projects table that predates
