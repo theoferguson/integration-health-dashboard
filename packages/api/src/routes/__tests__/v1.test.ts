@@ -123,6 +123,14 @@ describe('/api/v1 read API', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('invalid_query');
     });
+
+    it('400s on an object-valued param (qs bracket syntax), not 500', async () => {
+      const res = await request(app)
+        .get('/api/v1/events?integration[x]=foo')
+        .set(auth(secretA));
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('invalid_query');
+    });
   });
 
   it('stops honoring a revoked token', async () => {
