@@ -22,3 +22,22 @@ export const ingestRateLimiter = rateLimit({
   },
   message: { error: 'Too many requests - slow down and retry after the window resets' },
 });
+
+// The /api/v1 read surface (Door 2). Reads are cheaper and polled more often than
+// ingest (agents/MCP clients), so the default budget is higher. Keyed by read
+// token so each token gets its own budget; missing tokens fall to a per-IP bucket
+// that caps anonymous probing ahead of the 401.
+const READ_MAX_PER_WINDOW = Number(process.env.READ_API_RATE_LIMIT_PER_MIN) || 300;
+
+export const readApiRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: READ_MAX_PER_WINDOW,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const auth = req.header('authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : '';
+    return token || ipKeyGenerator(req.ip ?? 'unknown');
+  },
+  message: { error: { code: 'rate_limited', message: 'Too many requests - retry after the window resets' } },
+});

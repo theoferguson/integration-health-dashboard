@@ -130,6 +130,46 @@ on an idempotency hit, `400` with a specific message on a bad body, `401` on a
 missing/invalid key, `429` once a project exceeds its per-minute ingest budget
 (`RateLimit-*` headers say when to retry).
 
+## Reading data (the `/api/v1` API)
+
+Ingest is the write path; **`/api/v1`** is the read path — a versioned,
+read-only surface for querying health, events, and monitors programmatically.
+It's the foundation the planned MCP server wraps, so agents and scripts can
+evaluate integration status without scraping the dashboard (see the
+[Roadmap](./ROADMAP.md), Door 2).
+
+Auth is a **read token** — org-scoped, read-only, and distinct from a project's
+ingest key and the browser session (leaking one doesn't grant the others). Only
+its hash is stored; the secret is shown once. Mint one from the CLI (or the
+admin API — `POST /api/read-tokens`):
+
+```bash
+npm run create-read-token -w @ihd/api -- --org <orgId> --name "my-agent"
+# run without --org to list your org ids
+```
+
+Then send it as a bearer token:
+
+```bash
+curl https://integration-health-dashboard.fly.dev/api/v1/health \
+  -H "Authorization: Bearer ihd_read_your_token"
+```
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/v1/health` | Overall rollup + per-integration health. |
+| `GET /api/v1/integrations` | Every integration with its health status. |
+| `GET /api/v1/integrations/:id` | One integration's health + recent events. |
+| `GET /api/v1/events` | Paginated, filterable events (`integration`, `status`, `resolution_status`, `since`, `search`, `sort_by`, `sort_order`, `limit`≤100, `offset`). |
+| `GET /api/v1/events/:id` | A single event. |
+| `GET /api/v1/monitors` | The org's saved monitors. |
+| `GET /api/v1/monitors/:id/series` | A monitor's matching-event time series (`window`, `bucket`). |
+
+All responses are org-scoped to the token. Errors use a consistent envelope,
+`{ error: { code, message } }` — `401` (`unauthorized` / `invalid_token`), `400`
+(`invalid_query`), `404` (`not_found`), `429` (`rate_limited`, default 300/min
+per token via `READ_API_RATE_LIMIT_PER_MIN`, with `RateLimit-*` headers).
+
 ## Why AI (and why not everywhere)
 
 | Layer | Technology | Why |
@@ -246,6 +286,7 @@ The volume must exist before the first deploy (`fly deploy` won't create it from
 | `DB_PATH` | SQLite file path | No (`./data/ihd.db`; set to the mounted volume in prod) |
 | `EVENT_RETENTION_DAYS` | Days before events are swept | No (default 60) |
 | `INGEST_RATE_LIMIT_PER_MIN` | Max ingest requests per project per minute | No (default 120) |
+| `READ_API_RATE_LIMIT_PER_MIN` | Max `/api/v1` read requests per token per minute | No (default 300) |
 | `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App | Only for sign-in |
 | `SESSION_SECRET` | Signs the session cookie | Only for sign-in (insecure dev default otherwise) |
 

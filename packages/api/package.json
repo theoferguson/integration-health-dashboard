@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "create-project": "tsx src/scripts/createProject.ts"
+    "create-project": "tsx src/scripts/createProject.ts",
+    "create-read-token": "tsx src/scripts/createReadToken.ts"
   },
   "dependencies": {
     "@ihd/shared": "*",
