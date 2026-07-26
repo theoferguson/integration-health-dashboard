@@ -168,7 +168,8 @@ curl https://integration-health-dashboard.fly.dev/api/v1/health \
 All responses are org-scoped to the token. Errors use a consistent envelope,
 `{ error: { code, message } }` — `401` (`unauthorized` / `invalid_token`), `400`
 (`invalid_query`), `404` (`not_found`), `429` (`rate_limited`, default 300/min
-per token via `READ_API_RATE_LIMIT_PER_MIN`, with `RateLimit-*` headers).
+per token via `READ_API_RATE_LIMIT_PER_MIN`, plus a coarse per-IP ceiling for
+anonymous traffic; `RateLimit-*` headers say when to retry).
 
 ## Why AI (and why not everywhere)
 

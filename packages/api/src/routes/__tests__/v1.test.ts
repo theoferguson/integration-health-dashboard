@@ -84,6 +84,15 @@ describe('/api/v1 read API', () => {
       expect(integrations).not.toContain('stripe'); // org B - must not leak
     });
 
+    it('404s on an integration the org has never reported (no fabricated health)', async () => {
+      const known = await request(app).get('/api/v1/integrations/weather').set(auth(secretA));
+      expect(known.status).toBe(200);
+
+      const unknown = await request(app).get('/api/v1/integrations/nope-does-not-exist').set(auth(secretA));
+      expect(unknown.status).toBe(404);
+      expect(unknown.body.error.code).toBe('not_found');
+    });
+
     it("404s fetching another org's event by id", async () => {
       const own = await request(app).get(`/api/v1/events/${orgAEventId}`).set(auth(secretA));
       expect(own.status).toBe(200);
@@ -105,6 +114,14 @@ describe('/api/v1 read API', () => {
       const res = await request(app).get('/api/v1/events?limit=9999').set(auth(secretA));
       expect(res.status).toBe(200);
       expect(res.body.limit).toBe(100);
+    });
+
+    it('400s on a repeated param instead of 500ing at the SQL bind layer', async () => {
+      const res = await request(app)
+        .get('/api/v1/events?integration=a&integration=b')
+        .set(auth(secretA));
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('invalid_query');
     });
   });
 
