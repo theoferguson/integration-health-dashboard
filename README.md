@@ -30,6 +30,22 @@ and lets teams graph and triage what matters.
 A companion repo, **`integrations-host-app`**, is a real reporter that exercises
 this end to end (weather, NYT, NYC campaign-finance adapters emitting live events).
 
+## Direction
+
+The long-term goal is to **cut the technical middle out of integration
+observability** — serving two audiences directly off the same event store,
+instead of relying on an engineer to translate telemetry for everyone else:
+
+- **A monitoring UI for non-technical users** — CSMs, support, and partnership
+  teams answering *"is this customer's / partner's integration healthy?"* at a
+  glance, without reading logs or writing queries.
+- **A robust API as an agentic / MCP touchpoint** — a first-class programmatic
+  surface (and an MCP server over it) so skills, agents, and MCP clients can
+  query and evaluate integration status, and automate the monitor/triage loop
+  a human would otherwise run by hand.
+
+See the [Roadmap](./ROADMAP.md) for how the backlog maps to these two "front doors."
+
 ## The event model
 
 Events are the one thing integrators send. All fields below the line are optional

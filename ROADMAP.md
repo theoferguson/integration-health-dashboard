@@ -5,6 +5,61 @@ Backlog for the Integration Health Dashboard (IHD) and its companion
 
 ---
 
+## North Star — cut the middle out of integration observability
+
+The long-term direction: IHD serves two audiences **directly**, collapsing the
+technical intermediary that normally sits between raw integration telemetry and
+the people (or agents) who act on it. Two front doors onto the same event store:
+
+1. **A monitoring UI for non-technical users** — CSMs, support, partnerships, and
+   account teams who need to answer *"is this customer's / partner's integration
+   healthy?"* without reading logs or writing queries. Health at a glance,
+   plain-language status, and saved Monitors — no observability background
+   required.
+
+2. **A robust API as an agentic / MCP touchpoint** — a first-class programmatic
+   surface (and an MCP server over it) so skills, agents, and MCP clients can
+   query and evaluate integration status efficiently, and automate the
+   monitor/triage loop a human would otherwise run by hand.
+
+Both doors read the same events, monitors, and classifications. The bet is that
+the value isn't the dashboard or the API in isolation — it's removing the
+"an engineer in the middle interprets telemetry for everyone else" step for a
+human **and** an agent audience at once.
+
+Everything in the backlog below is a step toward one or both doors:
+- **Door 1 (human UI):** #2 Monitors, richer per-integration signals (#5),
+  in-app alerting.
+- **Door 2 (agent API):** #11 read/query API + MCP server, plus the contract
+  work that makes the data agent-legible — #7 `status` widening, #8 OTel interop,
+  #6 batching.
+
+---
+
+## 11. Agentic read/query API + MCP server (Door 2)
+
+The programmatic front door. Today the API is ingest-first (write events) plus
+the web app's own read endpoints; Door 2 needs a **stable, documented read/query
+surface** built for agents, and an **MCP server** over it.
+
+Rough shape (decision-first, nothing built yet):
+- A versioned read API: list/query events, integration health rollups, and
+  monitor state, with filters mirroring the web app (integration / status /
+  time window / `metrics.*` / `tags.*` / severity) — the same predicates
+  Monitors already speak, exposed programmatically.
+- Auth for non-interactive callers: scoped API tokens (read-only), distinct from
+  the ingest key and the browser session.
+- An **MCP server** wrapping that API so an agent can ask "which of this org's
+  integrations are degraded, and why?" and get structured, classification-aware
+  answers — not raw rows to re-derive.
+- Output shaped for agent consumption: summaries + the AI classification/root
+  cause already computed server-side, so the agent evaluates rather than parses.
+
+Depends on / benefits from: #7 (`status` widening — agent/analytics events),
+#8 (OTel mapping — agent-legible field names). Does **not** block Door 1.
+
+---
+
 ## 6. General-purpose hardening — make IHD a credible public tool
 
 From a 2026-07-20 review of the public contract against observability
