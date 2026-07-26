@@ -38,22 +38,30 @@ Everything in the backlog below is a step toward one or both doors:
 
 ## 11. Agentic read/query API + MCP server (Door 2)
 
-The programmatic front door. Today the API is ingest-first (write events) plus
-the web app's own read endpoints; Door 2 needs a **stable, documented read/query
-surface** built for agents, and an **MCP server** over it.
+The programmatic front door.
 
-Rough shape (decision-first, nothing built yet):
-- A versioned read API: list/query events, integration health rollups, and
-  monitor state, with filters mirroring the web app (integration / status /
-  time window / `metrics.*` / `tags.*` / severity) — the same predicates
-  Monitors already speak, exposed programmatically.
-- Auth for non-interactive callers: scoped API tokens (read-only), distinct from
-  the ingest key and the browser session.
-- An **MCP server** wrapping that API so an agent can ask "which of this org's
-  integrations are degraded, and why?" and get structured, classification-aware
-  answers — not raw rows to re-derive.
-- Output shaped for agent consumption: summaries + the AI classification/root
-  cause already computed server-side, so the agent evaluates rather than parses.
+**Done (shipped 2026-07-26, live in prod — Fly release v22):**
+- [x] **Versioned read API** (`GET /api/v1/*`): health rollups, filterable/
+  paginated events, per-integration health, monitors + series — over the same
+  org-scoped stores the web app uses, so query semantics never fork. PRs #2/#3.
+- [x] **Scoped read tokens** — org-scoped, read-only, distinct from the ingest
+  key and the session; SHA-256 hashed (secret shown once), revocable, with
+  `last_used_at`. Minted via `POST /api/read-tokens` (admin) or the
+  `create-read-token` CLI. Smoke-tested end-to-end against prod.
+- [x] Hardening that shipped with it (part of #12): two-layer read rate limit,
+  `{ error: { code, message } }` envelope, query validation, `trust proxy` fix.
+
+**Next slices (each its own branch):**
+- [ ] **MCP server over `/api/v1`** — the actual agent-facing payoff. Wraps the
+  read API as MCP tools so an agent can ask "which of this org's integrations
+  are degraded, and why?" and get structured, classification-aware answers —
+  summaries + the server-side AI root cause, not raw rows to re-derive. Auth via
+  a read token. This is the reason the read API exists.
+- [ ] **Read-token management UI** — today minting/revoking a token needs SSH or
+  the raw admin API (surfaced during the prod smoke test); a real user needs a
+  settings screen to create, list (name + prefix + `last_used_at`), and revoke
+  tokens. Server-side CRUD already exists (`/api/read-tokens`); this is the web
+  layer over it, admin-gated like Projects.
 
 Depends on / benefits from: #7 (`status` widening — agent/analytics events),
 #8 (OTel mapping — agent-legible field names). Does **not** block Door 1.
