@@ -89,14 +89,14 @@ router.get('/integrations/:id', (req, res) => {
 router.get('/events', (req, res) => {
   const q = req.query;
 
-  // Express parses ?k=a&k=b into an array; an array reaching the SQL bind layer
-  // throws a 500. Reject repeated params up front so every value below is a
-  // string | undefined.
+  // Express's qs parser turns ?k=a&k=b into an array and ?k[x]=a into an object;
+  // either reaching the SQL bind layer throws a 500. Require every filter to be a
+  // plain string (or absent) so nothing typed slips past into the query.
   const STRING_PARAMS = [
     'integration', 'search', 'since', 'status', 'resolution_status', 'sort_by', 'sort_order', 'limit', 'offset',
   ] as const;
   for (const name of STRING_PARAMS) {
-    if (Array.isArray(q[name])) {
+    if (q[name] !== undefined && typeof q[name] !== 'string') {
       return apiError(res, 400, 'invalid_query', `${name} must be a single value`);
     }
   }

@@ -13,7 +13,12 @@ export function createApp() {
 
   // Fly terminates TLS at the edge and forwards over plain HTTP; without this,
   // req.protocol always reports 'http', breaking the GitHub OAuth redirect_uri.
-  app.set('trust proxy', true);
+  // Trust exactly ONE hop (Fly's edge proxy), not `true`: with `true`, Express
+  // takes req.ip from the client-controlled leftmost X-Forwarded-For entry, so
+  // the per-IP rate-limit buckets become attacker-spoofable. Fly appends the
+  // real client IP as the last XFF entry, so trusting 1 hop reads that and
+  // ignores any entries the client forged. (Adjust if Fly ever adds hops.)
+  app.set('trust proxy', 1);
 
   // Middleware
   app.use(cors());
