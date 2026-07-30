@@ -69,11 +69,17 @@ The programmatic front door.
   `nyc-civic-finance` monitor (27 matches vs 700 total events).
 
 **Next slices (each its own branch):**
-- [ ] **MCP server over `/api/v1`** — the actual agent-facing payoff. Wraps the
+- [x] **MCP server over `/api/v1`** — the actual agent-facing payoff. Wraps the
   read API as MCP tools so an agent can ask "which of this org's integrations
   are degraded, and why?" and get structured, classification-aware answers —
   summaries + the server-side AI root cause, not raw rows to re-derive. Auth via
-  a read token. This is the reason the read API exists.
+  a read token. This is the reason the read API exists. *(Phase 1 shipped: a
+  remote streamable-HTTP server at `POST /mcp` with 8 read-only tools wrapping the
+  same service functions as `/api/v1`, authed by the `ihd_read_*` read token.
+  Live once deployed.)* The read-token check is isolated behind one swappable
+  boundary (`mcp/auth.ts`); **browser-OAuth for the one-click Claude.ai/Desktop
+  connectors is a later slice (Phase 4)** that replaces only that boundary — the
+  tools and transport wiring don't change.
 - [ ] **Read-token management UI** — today minting/revoking a token needs SSH or
   the raw admin API (surfaced during the prod smoke test); a real user needs a
   settings screen to create, list (name + prefix + `last_used_at`), and revoke
