@@ -6,6 +6,7 @@ import { findOrCreateUser } from '../../services/userStore.js';
 import { createOrgForUser } from '../../services/orgStore.js';
 import { createProject } from '../../services/projectStore.js';
 import { createEvent } from '../../services/eventStore.js';
+import { createMonitor } from '../../services/monitorStore.js';
 import { createReadToken, revokeReadTokenForOrg } from '../../services/readTokenStore.js';
 
 // Two isolated orgs, each with one project + one event and its own read token.
@@ -18,6 +19,7 @@ describe('/api/v1 read API', () => {
   let orgBEventId: string;
   let tokenAId: string;
   let orgAId: string;
+  let monitorAId: string;
 
   const auth = (secret: string) => ({ Authorization: `Bearer ${secret}` });
 
@@ -47,6 +49,18 @@ describe('/api/v1 read API', () => {
       payload: { org: 'B' },
       projectId: projB.id,
     }).id;
+
+    // A second org-A event on a different integration, so a monitor scoped to
+    // 'weather' must exclude it - proves the endpoint filters by the spec.
+    createEvent({
+      integration: 'nyt-news',
+      eventType: 'refresh',
+      status: 'success',
+      payload: { org: 'A' },
+      projectId: projA.id,
+    });
+
+    monitorAId = createMonitor(orgA.id, 'weather-only', { integration: 'weather' }).id;
 
     const a = createReadToken(orgA.id, 'agent-a');
     const b = createReadToken(orgB.id, 'agent-b');
@@ -199,6 +213,49 @@ describe('/api/v1 read API', () => {
       // examples, so we check the actual per-org values instead).
       expect(res.text).not.toContain(orgAId);
       expect(res.text).not.toContain('agent-a');
+    });
+  });
+
+  describe('monitor detail (GET /api/v1/monitors/:id)', () => {
+    it("returns the monitor config + only the events its spec matches", async () => {
+      const res = await request(app).get(`/api/v1/monitors/${monitorAId}`).set(auth(secretA));
+      expect(res.status).toBe(200);
+      expect(res.body.monitor.id).toBe(monitorAId);
+      expect(res.body.monitor.matchSpec.integration).toBe('weather');
+
+      const ints = res.body.events.map((e: { integration: string }) => e.integration);
+      expect(ints).toContain('weather'); // matches the spec
+      expect(ints).not.toContain('nyt-news'); // org A, but filtered out by the spec
+      // Same pagination envelope as /events.
+      expect(res.body).toHaveProperty('total');
+      expect(res.body).toHaveProperty('hasMore');
+    });
+
+    it('appears in the list endpoint with its spec (grab-all-then-pull flow)', async () => {
+      const list = await request(app).get('/api/v1/monitors').set(auth(secretA));
+      expect(list.status).toBe(200);
+      const mine = list.body.monitors.find((m: { id: string }) => m.id === monitorAId);
+      expect(mine).toBeTruthy();
+      expect(mine.matchSpec.integration).toBe('weather');
+    });
+
+    it("404s on another org's monitor id (no cross-org access, not probeable)", async () => {
+      const res = await request(app).get(`/api/v1/monitors/${monitorAId}`).set(auth(secretB));
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe('not_found');
+    });
+
+    it('404s on an unknown monitor id', async () => {
+      const res = await request(app).get('/api/v1/monitors/does-not-exist').set(auth(secretA));
+      expect(res.status).toBe(404);
+    });
+
+    it('warns on an unrecognized param but still returns matches', async () => {
+      const res = await request(app)
+        .get(`/api/v1/monitors/${monitorAId}?status=failure`)
+        .set(auth(secretA));
+      expect(res.status).toBe(200);
+      expect(res.body.warnings[0]).toContain('status'); // the spec is the filter, not ?status
     });
   });
 

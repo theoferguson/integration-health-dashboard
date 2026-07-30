@@ -108,7 +108,21 @@ export const V1_ENDPOINTS: EndpointDoc[] = [
   {
     method: 'GET',
     path: '/api/v1/monitors',
-    summary: "The org's saved monitors (named match specs over the event stream).",
+    summary:
+      "Every saved monitor with its match spec and last-24h activity (matchesLast24h, lastMatchedAt). List here to see what this org watches and which monitors are active, then pull a specific one's events with GET /api/v1/monitors/:id.",
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/monitors/:id',
+    summary:
+      "A single monitor's config plus the events its match spec currently selects (paginated, org-scoped, same event shape as /events). This is how you see what a monitor is actually catching, without re-deriving its filter yourself.",
+    query: {
+      since: 'ISO 8601 timestamp; matching events at or after it.',
+      sort_by: `One of: ${SORT_FIELDS.join(', ')}. Default timestamp.`,
+      sort_order: `One of: ${SORT_ORDERS.join(', ')}. Default desc.`,
+      limit: `1-${MAX_LIMIT}, default ${DEFAULT_LIMIT}. Out-of-range values are clamped, not rejected.`,
+      offset: 'Rows to skip. Default 0.',
+    },
   },
   {
     method: 'GET',

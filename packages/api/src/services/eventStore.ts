@@ -28,6 +28,13 @@ export interface GetEventsOptions {
   search?: string;
   /** Scope results to events belonging to this org's projects. */
   orgId?: string;
+  /**
+   * A pre-built WHERE fragment AND-ed into the query - produced by
+   * monitorMatch.buildMatchClause to select the events a monitor's spec matches.
+   * Internal/trusted: the only producer binds every value as a bound parameter,
+   * so it is injection-safe. Not exposed as a raw query param.
+   */
+  match?: { clause: string; params: unknown[] };
 }
 
 export interface PaginatedEvents {
@@ -123,6 +130,10 @@ function buildWhere(options?: GetEventsOptions): { clause: string; params: unkno
       `(LOWER(event_type) LIKE ? OR LOWER(integration) LIKE ? OR LOWER(json_extract(error, '$.message')) LIKE ? OR LOWER(json_extract(error, '$.code')) LIKE ?)`
     );
     params.push(term, term, term, term);
+  }
+  if (options?.match) {
+    conditions.push(`(${options.match.clause})`);
+    params.push(...options.match.params);
   }
 
   return {

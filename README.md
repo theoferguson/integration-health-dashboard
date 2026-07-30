@@ -163,7 +163,8 @@ curl https://integration-health-dashboard.fly.dev/api/v1/health \
 | `GET /api/v1/integrations/:id` | One integration's health + recent events. |
 | `GET /api/v1/events` | Paginated, filterable events (`integration`, `status`, `resolution_status`, `since`, `search`, `sort_by`, `sort_order`, `limit`≤100, `offset`). |
 | `GET /api/v1/events/:id` | A single event. |
-| `GET /api/v1/monitors` | The org's saved monitors. |
+| `GET /api/v1/monitors` | The org's saved monitors, each with its match spec + last-24h activity — list here, then pull one. |
+| `GET /api/v1/monitors/:id` | A monitor's config + the events its match spec currently selects (paginated: `since`, `sort_by`, `sort_order`, `limit`, `offset`). |
 | `GET /api/v1/monitors/:id/series` | A monitor's matching-event time series (`window`, `bucket`). |
 
 All responses are org-scoped to the token. Errors use a consistent envelope,

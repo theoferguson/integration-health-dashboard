@@ -50,14 +50,22 @@ The programmatic front door.
   `create-read-token` CLI. Smoke-tested end-to-end against prod.
 - [x] Hardening that shipped with it (part of #12): two-layer read rate limit,
   `{ error: { code, message } }` envelope, query validation, `trust proxy` fix.
-- [x] **Documented contract + agent discovery** (built, tested; pending deploy):
+- [x] **Documented contract + agent discovery** (shipped, live in prod — PR #4):
   a public `GET /llms.txt` orientation doc and a token-scoped `GET /api/v1`
   capability document (caller's org, the org's live integration vocabulary, legal
   enums, limits, and rate budget). The contract lives in one module
   (`services/apiContract.ts`) that `v1.ts` both validates against and documents
   from, so the enforced and documented contracts can't drift. Advisory boundaries
   only — no new enforcement. Sets up the MCP server to read tool schemas from the
-  API rather than duplicating them.
+  API rather than duplicating them. `PUBLIC_BASE_URL` set in prod so the docs'
+  self-links don't reflect a client Host header.
+- [x] **Monitor matching-events endpoint** (built, tested; pending deploy):
+  `GET /api/v1/monitors/:id` returns a monitor's config plus the events its match
+  spec currently selects (paginated, org-scoped, same event shape as `/events`).
+  With the existing `GET /api/v1/monitors` list, an agent can enumerate monitors +
+  their specs, then pull the matching events for the one it cares about — without
+  re-deriving the filter. Reuses `buildMatchClause` + `getEventsPaginated`, so
+  monitor and event query semantics never fork.
 
 **Next slices (each its own branch):**
 - [ ] **MCP server over `/api/v1`** — the actual agent-facing payoff. Wraps the
