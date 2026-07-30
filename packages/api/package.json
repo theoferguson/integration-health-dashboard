@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ihd/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^12.11.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -23,7 +24,8 @@
     "express": "^4.18.2",
     "express-rate-limit": "^8.6.0",
     "openai": "^4.24.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
