@@ -59,13 +59,14 @@ The programmatic front door.
   only — no new enforcement. Sets up the MCP server to read tool schemas from the
   API rather than duplicating them. `PUBLIC_BASE_URL` set in prod so the docs'
   self-links don't reflect a client Host header.
-- [x] **Monitor matching-events endpoint** (built, tested; pending deploy):
+- [x] **Monitor matching-events endpoint** (shipped, live in prod — Fly v26):
   `GET /api/v1/monitors/:id` returns a monitor's config plus the events its match
   spec currently selects (paginated, org-scoped, same event shape as `/events`).
   With the existing `GET /api/v1/monitors` list, an agent can enumerate monitors +
   their specs, then pull the matching events for the one it cares about — without
   re-deriving the filter. Reuses `buildMatchClause` + `getEventsPaginated`, so
-  monitor and event query semantics never fork.
+  monitor and event query semantics never fork. Verified live against the real
+  `nyc-civic-finance` monitor (27 matches vs 700 total events).
 
 **Next slices (each its own branch):**
 - [ ] **MCP server over `/api/v1`** — the actual agent-facing payoff. Wraps the
@@ -91,25 +92,31 @@ programmatic surface, the API needs best-practice structure and hardening as a
 first-class concern, not per-route patches.
 
 **Architecture:**
-- [ ] Versioned, stable read surface (`/api/v1/*`) with a **consistent response
+- [x] Versioned, stable read surface (`/api/v1/*`) with a **consistent response
   envelope** and error shape (`{ error: { code, message } }`) across endpoints.
-- [ ] Uniform **pagination + filtering** conventions shared by the web and API
-  readers (don't fork query semantics).
-- [ ] Documented contract — README reference now; typed client / OpenAPI later.
+- [x] Uniform **pagination + filtering** conventions shared by the web and API
+  readers (don't fork query semantics) — the monitor endpoint reuses the same
+  `getEventsPaginated` path, so nothing forks.
+- [x] Documented contract — shipped as the agent-discovery surface (`llms.txt` +
+  the `GET /api/v1` capability doc, single-source `apiContract.ts`). Typed client /
+  OpenAPI still later (see below).
 
 **Security / hardening:**
-- [ ] Scoped, **revocable, hashed** API tokens (read-only, distinct from the
-  ingest key and the session) with `last_used_at` for auditing. *(Lands with #11.)*
-- [ ] **Rate-limit the read API** (reuse `express-rate-limit`, keyed by token).
+- [x] Scoped, **revocable, hashed** API tokens (read-only, distinct from the
+  ingest key and the session) with `last_used_at` for auditing. *(Shipped with #11.)*
+- [x] **Rate-limit the read API** — two-layer (pre-auth per-IP ceiling + post-auth
+  per-token), IETF draft-7 `RateLimit-*` headers.
 - [ ] **Security headers** via `helmet`.
 - [ ] **Tighten CORS** from the current wide-open `app.use(cors())` to an
   allowlist (carried from the 2026-07-17 review; low-severity while pre-public).
-- [ ] **Query-param validation + bounds** (limit clamping, enum checks) at the
-  trust boundary, 400 with a specific message.
-- [ ] API errors never leak internals (stack traces / SQL) to callers.
+- [x] **Query-param validation + bounds** (limit clamping, enum checks) at the
+  trust boundary, 400 with a specific message; unknown params ignored-and-warned.
+- [x] API errors never leak internals (stack traces / SQL) to callers.
 
-Lands incrementally: hashed tokens, read rate-limit, error envelope, and query
-validation ship with #11; helmet, the CORS allowlist, and OpenAPI are fast-follow.
+Shipped with #11 (PRs #2–#4, live in prod): the response envelope, pagination/
+filtering, documented contract, hashed revocable tokens, read rate-limit, query
+validation, and no-internal-leak errors. **Still open:** `helmet`, the CORS
+allowlist, and OpenAPI / typed client.
 
 ---
 
