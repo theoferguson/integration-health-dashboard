@@ -28,8 +28,26 @@ import {
   getMonitorSeries,
 } from '../services/monitorStore.js';
 import type { ResolutionStatus } from '../types/index.js';
-import { requireReadToken, readOrgId, apiError } from '../middleware/readAuth.js';
-import { readIpRateLimiter, readTokenRateLimiter } from '../middleware/rateLimit.js';
+import { requireReadToken, readOrgId, readTokenName, apiError } from '../middleware/readAuth.js';
+import { readIpRateLimiter, readTokenRateLimiter, READ_MAX } from '../middleware/rateLimit.js';
+// The single source of truth for the v1 contract. These enums/bounds are both
+// validated against here and documented (by GET / and llms.txt) - so a filter
+// can't ship documented-but-unvalidated, or validated-but-undocumented.
+import {
+  EVENT_STATUSES,
+  RESOLUTION_STATUSES,
+  SORT_FIELDS,
+  SORT_ORDERS,
+  ERROR_CATEGORIES,
+  HEALTH_STATUSES,
+  SEVERITIES,
+  MAX_LIMIT,
+  DEFAULT_LIMIT,
+  V1_ENDPOINTS,
+  boundaries,
+  RECOMMENDED_WORKFLOW,
+} from '../services/apiContract.js';
+import { resolveBaseUrl } from '../services/baseUrl.js';
 
 const router = Router();
 
@@ -39,13 +57,54 @@ router.use(readIpRateLimiter);
 router.use(requireReadToken);
 router.use(readTokenRateLimiter);
 
-const EVENT_STATUSES = ['success', 'failure'] as const;
-const RESOLUTION_STATUSES: ResolutionStatus[] = ['open', 'acknowledged', 'resolved'];
-const SORT_FIELDS: SortField[] = ['timestamp', 'integration', 'eventType', 'status'];
-const SORT_ORDERS: SortOrder[] = ['asc', 'desc'];
+// ---- Capability document ------------------------------------------------
 
-const MAX_LIMIT = 100;
-const DEFAULT_LIMIT = 25;
+// GET /api/v1 - the token-scoped capability document: who the caller is, the
+// live filter vocabulary for THIS org (integration ids are pulled from the
+// org's own events, so filters are real rather than guessed), the limits, and
+// the advisory boundaries. Sits after the auth middleware, so it's scoped.
+router.get('/', (req, res) => {
+  const orgId = readOrgId(res);
+  res.json({
+    service: 'Integration Health Dashboard',
+    apiVersion: 'v1',
+    docs: `${resolveBaseUrl(req)}/llms.txt`,
+    you: {
+      orgId,
+      tokenName: readTokenName(res),
+      access: 'read-only',
+      scope: 'single org',
+    },
+    endpoints: V1_ENDPOINTS,
+    vocabulary: {
+      // Legal values for the GET /api/v1/events filters, keyed by the EXACT
+      // query-param name (snake_case) so an agent can copy a key straight into
+      // a query string. `integration` is the org's own live set.
+      filters: {
+        integration: getDistinctIntegrations(orgId),
+        status: EVENT_STATUSES,
+        resolution_status: RESOLUTION_STATUSES,
+        sort_by: SORT_FIELDS,
+        sort_order: SORT_ORDERS,
+      },
+      // Enums that appear in RESPONSES (health, classification), not filters -
+      // separated so an agent doesn't try ?health= or ?category= and have it
+      // silently ignored. These are for interpreting results.
+      responseValues: {
+        healthStatus: HEALTH_STATUSES,
+        errorCategory: ERROR_CATEGORIES,
+        severity: SEVERITIES,
+      },
+    },
+    limits: {
+      maxLimit: MAX_LIMIT,
+      defaultLimit: DEFAULT_LIMIT,
+      rateLimit: { perTokenPerMinute: READ_MAX, headers: 'RateLimit-*' },
+    },
+    boundaries: boundaries(READ_MAX),
+    gettingStarted: RECOMMENDED_WORKFLOW,
+  });
+});
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   const n = Number(value);
@@ -134,6 +193,22 @@ router.get('/events', (req, res) => {
     search: q.search as string | undefined,
     orgId: readOrgId(res),
   });
+
+  // Advisory feedback, not rejection. Unknown params are ignored so discovery
+  // stays cheap (an agent probing filters never eats a 400), but a guessed or
+  // typo'd filter like ?category= would otherwise return an unfiltered set that
+  // *looks* filtered - the silent-wrong-answer failure mode. So we surface it on
+  // the same response, pointing back at the discovery doc. STRING_PARAMS is the
+  // recognized set, so this can't drift from what's actually honored.
+  const unknown = Object.keys(q).filter((k) => !(STRING_PARAMS as readonly string[]).includes(k));
+  if (unknown.length > 0) {
+    return res.json({
+      ...result,
+      warnings: [
+        `Ignored unrecognized query parameter(s): ${unknown.join(', ')}. Valid filters are listed at GET /api/v1 under vocabulary.filters.`,
+      ],
+    });
+  }
 
   res.json(result);
 });

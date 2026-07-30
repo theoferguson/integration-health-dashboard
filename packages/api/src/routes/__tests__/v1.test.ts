@@ -131,6 +131,75 @@ describe('/api/v1 read API', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('invalid_query');
     });
+
+    it('ignores an unknown param but warns instead of erroring or filtering', async () => {
+      const res = await request(app).get('/api/v1/events?category=auth').set(auth(secretA));
+      expect(res.status).toBe(200); // cheap discovery - not rejected
+      expect(Array.isArray(res.body.warnings)).toBe(true);
+      expect(res.body.warnings[0]).toContain('category');
+    });
+
+    it('omits warnings entirely when all params are recognized', async () => {
+      const res = await request(app).get('/api/v1/events?status=success&limit=5').set(auth(secretA));
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty('warnings');
+    });
+  });
+
+  describe('capability document (GET /api/v1)', () => {
+    it('401s without a token', async () => {
+      const res = await request(app).get('/api/v1');
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('unauthorized');
+    });
+
+    it("reflects the caller's own org id, token name, and limits", async () => {
+      const res = await request(app).get('/api/v1').set(auth(secretA));
+      expect(res.status).toBe(200);
+      expect(res.body.you.orgId).toBe(orgAId);
+      expect(res.body.you.tokenName).toBe('agent-a');
+      expect(res.body.you.access).toBe('read-only');
+      expect(res.body.limits.maxLimit).toBe(100);
+      expect(Array.isArray(res.body.endpoints)).toBe(true);
+      expect(res.body.endpoints.length).toBeGreaterThan(0);
+    });
+
+    it('keys the filter vocabulary by the real snake_case query-param names', async () => {
+      const res = await request(app).get('/api/v1').set(auth(secretA));
+      // These keys must be copyable straight into a ?query string.
+      expect(res.body.vocabulary.filters).toHaveProperty('resolution_status');
+      expect(res.body.vocabulary.filters).toHaveProperty('sort_by');
+      expect(res.body.vocabulary.filters).toHaveProperty('sort_order');
+      // Response-only enums live apart from filters, so nobody tries ?category=.
+      expect(res.body.vocabulary.responseValues).toHaveProperty('healthStatus');
+      expect(res.body.vocabulary.responseValues.severity).toContain('critical');
+      expect(res.body.vocabulary.filters).not.toHaveProperty('errorCategory');
+    });
+
+    it('scopes the live integration vocabulary per org (no cross-org leak)', async () => {
+      const a = await request(app).get('/api/v1').set(auth(secretA));
+      const b = await request(app).get('/api/v1').set(auth(secretB));
+
+      // Org A reported 'weather', org B reported 'stripe'. Each sees only its own.
+      expect(a.body.vocabulary.filters.integration).toContain('weather');
+      expect(a.body.vocabulary.filters.integration).not.toContain('stripe');
+      expect(b.body.vocabulary.filters.integration).toContain('stripe');
+      expect(b.body.vocabulary.filters.integration).not.toContain('weather');
+    });
+  });
+
+  describe('llms.txt (public discovery doc)', () => {
+    it('serves markdown, unauthenticated', async () => {
+      const res = await request(app).get('/llms.txt');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/markdown');
+      expect(res.text).toContain('# Integration Health Dashboard');
+      // Public - it describes the API shape and never leaks a real org's
+      // identity or credentials (the prose does use weather/stripe as generic
+      // examples, so we check the actual per-org values instead).
+      expect(res.text).not.toContain(orgAId);
+      expect(res.text).not.toContain('agent-a');
+    });
   });
 
   it('stops honoring a revoked token', async () => {

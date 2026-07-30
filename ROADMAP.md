@@ -50,6 +50,14 @@ The programmatic front door.
   `create-read-token` CLI. Smoke-tested end-to-end against prod.
 - [x] Hardening that shipped with it (part of #12): two-layer read rate limit,
   `{ error: { code, message } }` envelope, query validation, `trust proxy` fix.
+- [x] **Documented contract + agent discovery** (built, tested; pending deploy):
+  a public `GET /llms.txt` orientation doc and a token-scoped `GET /api/v1`
+  capability document (caller's org, the org's live integration vocabulary, legal
+  enums, limits, and rate budget). The contract lives in one module
+  (`services/apiContract.ts`) that `v1.ts` both validates against and documents
+  from, so the enforced and documented contracts can't drift. Advisory boundaries
+  only — no new enforcement. Sets up the MCP server to read tool schemas from the
+  API rather than duplicating them.
 
 **Next slices (each its own branch):**
 - [ ] **MCP server over `/api/v1`** — the actual agent-facing payoff. Wraps the

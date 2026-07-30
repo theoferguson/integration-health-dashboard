@@ -21,7 +21,7 @@ describe('readTokenStore', () => {
     expect(token.prefix).toBe(secret.slice(0, 'ihd_read_'.length + 6));
 
     const ctx = verifyReadToken(secret);
-    expect(ctx).toEqual({ orgId: org, tokenId: token.id });
+    expect(ctx).toEqual({ orgId: org, tokenId: token.id, name: 'agent-1' });
   });
 
   it('rejects unknown, malformed, and revoked secrets', () => {

@@ -55,7 +55,9 @@ export const ingestRateLimiter = makeLimiter({
 // probing regardless of the bearer value, and a per-token budget runs AFTER auth
 // for fair per-token quota. Reads are cheaper and polled more often than ingest
 // (agents/MCP), so the default budget is higher.
-const READ_MAX = Number(process.env.READ_API_RATE_LIMIT_PER_MIN) || 300;
+// Exported so the capability doc + llms.txt quote the real configured limit
+// rather than a duplicated literal (apiContract.boundaries takes it as an arg).
+export const READ_MAX = Number(process.env.READ_API_RATE_LIMIT_PER_MIN) || 300;
 // Generous multiple so several tokens behind one NAT aren't starved, while a
 // single IP still can't send unbounded anonymous traffic.
 const READ_IP_CEILING = READ_MAX * 5;
