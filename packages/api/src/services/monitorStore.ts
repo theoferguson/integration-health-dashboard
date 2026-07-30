@@ -7,6 +7,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '../db/connection.js';
 import { buildMatchClause } from './monitorMatch.js';
+import { getEventsPaginated, type GetEventsOptions, type PaginatedEvents } from './eventStore.js';
 import type { Monitor, MonitorMatchSpec, MonitorSummary, MonitorSeriesPoint } from '../types/index.js';
 
 interface MonitorRow {
@@ -106,6 +107,20 @@ function matchSummary(
     )
     .get(orgId, Date.now() - DAY_MS, ...params) as { c: number; last: number | null };
   return { matchesLast24h: row.c, lastMatchedAt: row.last };
+}
+
+/**
+ * The actual events a monitor's spec currently matches, paginated + org-scoped.
+ * Same pagination/sort semantics as GET /api/v1/events - the matchSpec is
+ * compiled to a WHERE fragment (buildMatchClause) and AND-ed into that query, so
+ * "view a monitor" returns the same event shape as browsing events directly.
+ */
+export function getMonitorMatches(
+  orgId: string,
+  spec: MonitorMatchSpec,
+  options: Pick<GetEventsOptions, 'limit' | 'offset' | 'since' | 'sortBy' | 'sortOrder'>
+): PaginatedEvents {
+  return getEventsPaginated({ ...options, orgId, match: buildMatchClause(spec) });
 }
 
 /**

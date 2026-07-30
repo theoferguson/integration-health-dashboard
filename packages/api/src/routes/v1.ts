@@ -25,6 +25,7 @@ import {
 import {
   listMonitorsForOrg,
   getMonitorForOrg,
+  getMonitorMatches,
   getMonitorSeries,
 } from '../services/monitorStore.js';
 import type { ResolutionStatus } from '../types/index.js';
@@ -112,6 +113,24 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
+/**
+ * Advisory (non-fatal) notice naming any query params not in `recognized`.
+ * Unknown params are ignored, not rejected - so discovery stays cheap - but a
+ * guessed/typo'd filter would otherwise return an unfiltered set that looks
+ * filtered, so we surface it and point back at the discovery doc. Returns
+ * undefined when everything is recognized, so the key is simply omitted.
+ */
+function unknownParamWarnings(
+  q: Record<string, unknown>,
+  recognized: readonly string[]
+): string[] | undefined {
+  const unknown = Object.keys(q).filter((k) => !recognized.includes(k));
+  if (unknown.length === 0) return undefined;
+  return [
+    `Ignored unrecognized query parameter(s): ${unknown.join(', ')}. Valid filters are listed at GET /api/v1 under vocabulary.filters.`,
+  ];
+}
+
 // ---- Health -------------------------------------------------------------
 
 // GET /api/v1/health - overall rollup + per-integration health.
@@ -194,23 +213,10 @@ router.get('/events', (req, res) => {
     orgId: readOrgId(res),
   });
 
-  // Advisory feedback, not rejection. Unknown params are ignored so discovery
-  // stays cheap (an agent probing filters never eats a 400), but a guessed or
-  // typo'd filter like ?category= would otherwise return an unfiltered set that
-  // *looks* filtered - the silent-wrong-answer failure mode. So we surface it on
-  // the same response, pointing back at the discovery doc. STRING_PARAMS is the
-  // recognized set, so this can't drift from what's actually honored.
-  const unknown = Object.keys(q).filter((k) => !(STRING_PARAMS as readonly string[]).includes(k));
-  if (unknown.length > 0) {
-    return res.json({
-      ...result,
-      warnings: [
-        `Ignored unrecognized query parameter(s): ${unknown.join(', ')}. Valid filters are listed at GET /api/v1 under vocabulary.filters.`,
-      ],
-    });
-  }
-
-  res.json(result);
+  // STRING_PARAMS is the recognized set, so the advisory can't drift from what's
+  // actually honored.
+  const warnings = unknownParamWarnings(q, STRING_PARAMS);
+  res.json(warnings ? { ...result, warnings } : result);
 });
 
 // GET /api/v1/events/:id - a single event, scoped to the caller's org.
@@ -229,6 +235,51 @@ const MAX_BUCKETS = 500;
 // GET /api/v1/monitors - the org's saved monitors.
 router.get('/monitors', (req, res) => {
   res.json({ monitors: listMonitorsForOrg(readOrgId(res)) });
+});
+
+// GET /api/v1/monitors/:id - the monitor's config + the events its match spec
+// currently selects (paginated, org-scoped). "View this monitor" = see what it's
+// actually catching, without re-implementing its filter. The filter IS the
+// monitor's spec, so this endpoint takes only pagination/sort params; any extra
+// query param is ignored and reported via `warnings` (same as /events).
+router.get('/monitors/:id', (req, res) => {
+  const orgId = readOrgId(res);
+  const monitor = getMonitorForOrg(req.params.id, orgId);
+  // Same 404 (not 403) for an unknown id and another org's id, so ownership
+  // can't be probed by id.
+  if (!monitor) return apiError(res, 404, 'not_found', 'Monitor not found');
+
+  const q = req.query;
+  const RECOGNIZED = ['since', 'sort_by', 'sort_order', 'limit', 'offset'] as const;
+  for (const name of RECOGNIZED) {
+    if (q[name] !== undefined && typeof q[name] !== 'string') {
+      return apiError(res, 400, 'invalid_query', `${name} must be a single value`);
+    }
+  }
+  if (q.sort_by !== undefined && !SORT_FIELDS.includes(q.sort_by as SortField)) {
+    return apiError(res, 400, 'invalid_query', `sort_by must be one of: ${SORT_FIELDS.join(', ')}`);
+  }
+  if (q.sort_order !== undefined && !SORT_ORDERS.includes(q.sort_order as SortOrder)) {
+    return apiError(res, 400, 'invalid_query', `sort_order must be one of: ${SORT_ORDERS.join(', ')}`);
+  }
+  let since: Date | undefined;
+  if (q.since !== undefined) {
+    since = new Date(q.since as string);
+    if (Number.isNaN(since.getTime())) {
+      return apiError(res, 400, 'invalid_query', 'since must be a valid ISO date');
+    }
+  }
+
+  const matches = getMonitorMatches(orgId, monitor.matchSpec, {
+    limit: clampInt(q.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
+    offset: clampInt(q.offset, 0, 0, Number.MAX_SAFE_INTEGER),
+    since,
+    sortBy: q.sort_by as SortField | undefined,
+    sortOrder: q.sort_order as SortOrder | undefined,
+  });
+
+  const warnings = unknownParamWarnings(q, RECOGNIZED);
+  res.json(warnings ? { monitor, ...matches, warnings } : { monitor, ...matches });
 });
 
 // GET /api/v1/monitors/:id/series - a monitor's matching-event time series.
