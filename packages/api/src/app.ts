@@ -7,6 +7,7 @@ import routes from './routes/index.js';
 import { renderLlmsTxt } from './services/apiContract.js';
 import { resolveBaseUrl } from './services/baseUrl.js';
 import { READ_MAX } from './middleware/rateLimit.js';
+import { handleMcpPost } from './mcp/http.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,15 @@ export function createApp() {
   app.get('/llms.txt', (req, res) => {
     res.type('text/markdown; charset=utf-8').send(renderLlmsTxt(resolveBaseUrl(req), READ_MAX));
   });
+
+  // Remote MCP server over the /api/v1 read surface (ROADMAP #11, Phase 1). Same
+  // reasoning as /llms.txt above: MUST be registered before the static/SPA block,
+  // or in production POST /mcp would fall through to the `app.get('*')` shell.
+  // The global express.json() above already parsed req.body, which the transport
+  // consumes. GET/DELETE to /mcp fall through to the SDK's default 405 semantics
+  // via the transport - here we only wire POST. Auth + Origin checks live in the
+  // handler (mcp/http.ts); the swappable auth boundary is mcp/auth.ts.
+  app.post('/mcp', handleMcpPost);
 
   // Serve static frontend in production
   if (process.env.NODE_ENV === 'production') {
