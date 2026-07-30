@@ -28,8 +28,24 @@ import {
   getMonitorSeries,
 } from '../services/monitorStore.js';
 import type { ResolutionStatus } from '../types/index.js';
-import { requireReadToken, readOrgId, apiError } from '../middleware/readAuth.js';
-import { readIpRateLimiter, readTokenRateLimiter } from '../middleware/rateLimit.js';
+import { requireReadToken, readOrgId, readTokenName, apiError } from '../middleware/readAuth.js';
+import { readIpRateLimiter, readTokenRateLimiter, READ_MAX } from '../middleware/rateLimit.js';
+// The single source of truth for the v1 contract. These enums/bounds are both
+// validated against here and documented (by GET / and llms.txt) - so a filter
+// can't ship documented-but-unvalidated, or validated-but-undocumented.
+import {
+  EVENT_STATUSES,
+  RESOLUTION_STATUSES,
+  SORT_FIELDS,
+  SORT_ORDERS,
+  ERROR_CATEGORIES,
+  HEALTH_STATUSES,
+  MAX_LIMIT,
+  DEFAULT_LIMIT,
+  V1_ENDPOINTS,
+  boundaries,
+  RECOMMENDED_WORKFLOW,
+} from '../services/apiContract.js';
 
 const router = Router();
 
@@ -39,13 +55,44 @@ router.use(readIpRateLimiter);
 router.use(requireReadToken);
 router.use(readTokenRateLimiter);
 
-const EVENT_STATUSES = ['success', 'failure'] as const;
-const RESOLUTION_STATUSES: ResolutionStatus[] = ['open', 'acknowledged', 'resolved'];
-const SORT_FIELDS: SortField[] = ['timestamp', 'integration', 'eventType', 'status'];
-const SORT_ORDERS: SortOrder[] = ['asc', 'desc'];
+// ---- Capability document ------------------------------------------------
 
-const MAX_LIMIT = 100;
-const DEFAULT_LIMIT = 25;
+// GET /api/v1 - the token-scoped capability document: who the caller is, the
+// live filter vocabulary for THIS org (integration ids are pulled from the
+// org's own events, so filters are real rather than guessed), the limits, and
+// the advisory boundaries. Sits after the auth middleware, so it's scoped.
+router.get('/', (req, res) => {
+  const orgId = readOrgId(res);
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    service: 'Integration Health Dashboard',
+    apiVersion: 'v1',
+    docs: `${baseUrl}/llms.txt`,
+    you: {
+      orgId,
+      tokenName: readTokenName(res),
+      access: 'read-only',
+      scope: 'single org',
+    },
+    endpoints: V1_ENDPOINTS,
+    vocabulary: {
+      integrations: getDistinctIntegrations(orgId),
+      status: EVENT_STATUSES,
+      resolutionStatus: RESOLUTION_STATUSES,
+      sortBy: SORT_FIELDS,
+      sortOrder: SORT_ORDERS,
+      healthStatus: HEALTH_STATUSES,
+      errorCategories: ERROR_CATEGORIES,
+    },
+    limits: {
+      maxLimit: MAX_LIMIT,
+      defaultLimit: DEFAULT_LIMIT,
+      rateLimit: { perTokenPerMinute: READ_MAX, headers: 'RateLimit-*' },
+    },
+    boundaries: boundaries(READ_MAX),
+    gettingStarted: RECOMMENDED_WORKFLOW,
+  });
+});
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   const n = Number(value);

@@ -34,10 +34,16 @@ export function requireReadToken(req: Request, res: Response, next: NextFunction
 
   res.locals.orgId = ctx.orgId;
   res.locals.tokenId = ctx.tokenId;
+  res.locals.tokenName = ctx.name;
   next();
 }
 
 /** The caller's org id. Only valid after requireReadToken. */
 export function readOrgId(res: Response): string {
   return res.locals.orgId as string;
+}
+
+/** The name the caller's token was minted with. Only valid after requireReadToken. */
+export function readTokenName(res: Response): string {
+  return res.locals.tokenName as string;
 }

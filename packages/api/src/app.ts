@@ -4,6 +4,8 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import routes from './routes/index.js';
+import { renderLlmsTxt } from './services/apiContract.js';
+import { READ_MAX } from './middleware/rateLimit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +33,16 @@ export function createApp() {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Public agent-discovery doc (llms.txt convention). Unauthenticated - it
+  // describes the shape of the API and how to get a token, never any org's data.
+  // MUST be registered before the static/SPA block below, or production would
+  // match the `app.get('*')` fallback and serve the SPA shell instead. baseUrl
+  // is derived from req.protocol (correct behind Fly's edge - trust proxy is 1).
+  app.get('/llms.txt', (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.type('text/markdown; charset=utf-8').send(renderLlmsTxt(baseUrl, READ_MAX));
   });
 
   // Serve static frontend in production

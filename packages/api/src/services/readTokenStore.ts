@@ -75,7 +75,9 @@ export function createReadToken(orgId: string, name: string): { token: ReadToken
  * by hash (indexed) so it doesn't leak timing about the secret itself. Stamps
  * last_used_at, throttled, for auditing.
  */
-export function verifyReadToken(secret: string): { orgId: string; tokenId: string } | null {
+export function verifyReadToken(
+  secret: string
+): { orgId: string; tokenId: string; name: string } | null {
   if (!secret.startsWith(TOKEN_PREFIX)) return null;
 
   const row = db.prepare('SELECT * FROM read_tokens WHERE token_hash = ?').get(hashToken(secret)) as
@@ -88,7 +90,9 @@ export function verifyReadToken(secret: string): { orgId: string; tokenId: strin
     db.prepare('UPDATE read_tokens SET last_used_at = ? WHERE id = ?').run(now, row.id);
   }
 
-  return { orgId: row.org_id, tokenId: row.id };
+  // The row is already loaded, so returning the token name for the capability
+  // doc's "you" block costs no extra query.
+  return { orgId: row.org_id, tokenId: row.id, name: row.name };
 }
 
 /** All of an org's tokens (active + revoked), newest first. Never includes the hash or secret. */

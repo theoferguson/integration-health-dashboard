@@ -157,6 +157,7 @@ curl https://integration-health-dashboard.fly.dev/api/v1/health \
 
 | Endpoint | Returns |
 |----------|---------|
+| `GET /api/v1` | Capability document scoped to your token (see _Agent discovery_ below). |
 | `GET /api/v1/health` | Overall rollup + per-integration health. |
 | `GET /api/v1/integrations` | Every integration with its health status. |
 | `GET /api/v1/integrations/:id` | One integration's health + recent events. |
@@ -170,6 +171,25 @@ All responses are org-scoped to the token. Errors use a consistent envelope,
 (`invalid_query`), `404` (`not_found`), `429` (`rate_limited`, default 300/min
 per token via `READ_API_RATE_LIMIT_PER_MIN`, plus a coarse per-IP ceiling for
 anonymous traffic; `RateLimit-*` headers say when to retry).
+
+### Agent discovery
+
+Two endpoints let an agent orient itself without hardcoding assumptions, following
+the emerging llms.txt → capability-doc convention:
+
+- **`GET /llms.txt`** (public, no token) — a Markdown orientation doc: what IHD is,
+  how auth works, the endpoint list, a recommended workflow, and the boundaries.
+  This is the file agents and crawlers look for; it describes the _shape_ of the
+  API and never any org's data.
+- **`GET /api/v1`** (token-scoped) — a JSON capability document for _this caller_:
+  its org and token name, the **live filter vocabulary for that org** (integration
+  ids pulled from the org's own events, so filters are real rather than guessed),
+  every legal enum, the page-size cap, and the per-token rate budget. Undocumented
+  limits are the top agent failure mode, so the budget travels in the payload.
+
+The contract (enums, bounds, endpoint list, boundaries) lives in one module,
+`services/apiContract.ts`, which `v1.ts` both **validates against and documents
+from** — so a filter can't ship documented-but-unvalidated, or the reverse.
 
 ## Why AI (and why not everywhere)
 

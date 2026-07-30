@@ -133,6 +133,50 @@ describe('/api/v1 read API', () => {
     });
   });
 
+  describe('capability document (GET /api/v1)', () => {
+    it('401s without a token', async () => {
+      const res = await request(app).get('/api/v1');
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('unauthorized');
+    });
+
+    it("reflects the caller's own org id, token name, and limits", async () => {
+      const res = await request(app).get('/api/v1').set(auth(secretA));
+      expect(res.status).toBe(200);
+      expect(res.body.you.orgId).toBe(orgAId);
+      expect(res.body.you.tokenName).toBe('agent-a');
+      expect(res.body.you.access).toBe('read-only');
+      expect(res.body.limits.maxLimit).toBe(100);
+      expect(Array.isArray(res.body.endpoints)).toBe(true);
+      expect(res.body.endpoints.length).toBeGreaterThan(0);
+    });
+
+    it('scopes the live integration vocabulary per org (no cross-org leak)', async () => {
+      const a = await request(app).get('/api/v1').set(auth(secretA));
+      const b = await request(app).get('/api/v1').set(auth(secretB));
+
+      // Org A reported 'weather', org B reported 'stripe'. Each sees only its own.
+      expect(a.body.vocabulary.integrations).toContain('weather');
+      expect(a.body.vocabulary.integrations).not.toContain('stripe');
+      expect(b.body.vocabulary.integrations).toContain('stripe');
+      expect(b.body.vocabulary.integrations).not.toContain('weather');
+    });
+  });
+
+  describe('llms.txt (public discovery doc)', () => {
+    it('serves markdown, unauthenticated', async () => {
+      const res = await request(app).get('/llms.txt');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/markdown');
+      expect(res.text).toContain('# Integration Health Dashboard');
+      // Public - it describes the API shape and never leaks a real org's
+      // identity or credentials (the prose does use weather/stripe as generic
+      // examples, so we check the actual per-org values instead).
+      expect(res.text).not.toContain(orgAId);
+      expect(res.text).not.toContain('agent-a');
+    });
+  });
+
   it('stops honoring a revoked token', async () => {
     expect(revokeReadTokenForOrg(tokenAId, orgAId)).toBe(true);
     const res = await request(app).get('/api/v1/health').set(auth(secretA));
