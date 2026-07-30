@@ -17,6 +17,7 @@
 
 import type { Request } from 'express';
 import { verifyReadToken } from '../services/readTokenStore.js';
+import { bearerToken } from '../middleware/readAuth.js';
 
 /** What a successfully authenticated MCP request resolves to. Tools scope on `orgId`. */
 export interface McpAuthContext {
@@ -36,16 +37,9 @@ export type McpAuthResult =
   | { ok: false; code: 'unauthorized' | 'invalid_token'; message: string };
 
 /**
- * Extract the Bearer token exactly as middleware/readAuth does, so the MCP door
- * and the HTTP door parse credentials identically.
- */
-function bearerToken(req: Request): string | null {
-  const header = req.header('authorization') || '';
-  return header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : null;
-}
-
-/**
- * Resolve an MCP request to its org context, or a typed failure.
+ * Resolve an MCP request to its org context, or a typed failure. Credentials are
+ * parsed with the same `bearerToken` helper the HTTP door uses (readAuth), so
+ * both doors accept a token identically.
  *
  * Phase 4 swaps the implementation below (read-token lookup) for OAuth
  * access-token validation without changing this signature. NOTE: verifyReadToken

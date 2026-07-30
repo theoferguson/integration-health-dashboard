@@ -26,7 +26,7 @@ import {
   type SortOrder,
 } from '../services/eventStore.js';
 import {
-  getOverallHealth,
+  summarizeHealth,
   getAllIntegrationHealth,
   getIntegrationHealth,
 } from '../services/healthCalculator.js';
@@ -45,13 +45,15 @@ import {
   MAX_LIMIT,
   DEFAULT_LIMIT,
   RECOMMENDED_WORKFLOW,
+  clampInt,
+  clampSeriesWindow,
 } from '../services/apiContract.js';
 import type { McpAuthContext } from './auth.js';
 
 // Server version tracks the api package. rootDir is ./src, so package.json can't
 // be imported as a module - require it at runtime (resolves the same from dist
 // and from tsx dev). Fallback keeps the server buildable if the read ever fails.
-function serverVersion(): string {
+function readServerVersion(): string {
   try {
     const require = createRequire(import.meta.url);
     return (require('../../package.json') as { version?: string }).version ?? '0.1.0';
@@ -59,19 +61,9 @@ function serverVersion(): string {
     return '0.1.0';
   }
 }
-
-// ---- Shared helpers (mirror routes/v1.ts) -------------------------------
-
-/** Same clamp as v1.ts clampInt: coerce, floor, and bound - never reject. */
-function clampInt(value: unknown, fallback: number, min: number, max: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, Math.floor(n)));
-}
-
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-const MAX_BUCKETS = 500;
+// Resolved once at module load - the version is fixed for the process lifetime,
+// so there's no need to re-read it in the per-request buildMcpServer factory.
+const SERVER_VERSION = readServerVersion();
 
 /** A zod string-enum built from an apiContract array (no literals duplicated here). */
 function enumOf<T extends string>(values: readonly T[]) {
@@ -80,7 +72,7 @@ function enumOf<T extends string>(values: readonly T[]) {
 
 /** Serialize a successful result as the single text-content block every tool returns. */
 function ok(result: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+  return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
 }
 
 /**
@@ -91,11 +83,57 @@ function ok(result: unknown) {
 function toolError(code: string, message: string) {
   return {
     isError: true as const,
-    content: [{ type: 'text' as const, text: JSON.stringify({ error: { code, message } }, null, 2) }],
+    content: [{ type: 'text' as const, text: JSON.stringify({ error: { code, message } }) }],
   };
 }
 
 const READ_ONLY = { readOnlyHint: true } as const;
+
+// Shared pagination/sort input for the event-listing tools (query_events,
+// get_monitor) - same shape and clamping as the /api/v1 events/monitor endpoints.
+const PAGINATION_SHAPE = {
+  since: z.string().optional().describe('ISO 8601 timestamp; events at or after it.'),
+  sort_by: enumOf(SORT_FIELDS).optional().describe('Sort field. Default timestamp.'),
+  sort_order: enumOf(SORT_ORDERS).optional().describe('Sort direction. Default desc.'),
+  limit: z
+    .number()
+    .int()
+    .optional()
+    .describe(`1-${MAX_LIMIT}, default ${DEFAULT_LIMIT}. Out-of-range values are clamped.`),
+  offset: z.number().int().optional().describe('Rows to skip. Default 0.'),
+};
+
+interface PageOpts {
+  limit: number;
+  offset: number;
+  since?: Date;
+  sortBy?: SortField;
+  sortOrder?: SortOrder;
+}
+
+/** Normalize the shared pagination args, or return a toolError for a bad `since`. */
+function parsePagination(args: {
+  since?: string;
+  sort_by?: string;
+  sort_order?: string;
+  limit?: number;
+  offset?: number;
+}): PageOpts | ReturnType<typeof toolError> {
+  let since: Date | undefined;
+  if (args.since !== undefined) {
+    since = new Date(args.since);
+    if (Number.isNaN(since.getTime())) {
+      return toolError('invalid_query', 'since must be a valid ISO date');
+    }
+  }
+  return {
+    limit: clampInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
+    offset: clampInt(args.offset, 0, 0, Number.MAX_SAFE_INTEGER),
+    since,
+    sortBy: args.sort_by as SortField | undefined,
+    sortOrder: args.sort_order as SortOrder | undefined,
+  };
+}
 
 /**
  * Build a request-scoped MCP server. All tool handlers close over `ctx.orgId`.
@@ -104,7 +142,7 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
   const { orgId } = ctx;
 
   const server = new McpServer(
-    { name: 'integration-health-dashboard', version: serverVersion() },
+    { name: 'integration-health-dashboard', version: SERVER_VERSION },
     {
       // Orient the agent with the same recommended workflow the HTTP surface
       // publishes, framed for the tool names exposed here.
@@ -130,8 +168,12 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
       inputSchema: {},
       annotations: READ_ONLY,
     },
-    async () =>
-      ok({ health: getOverallHealth(orgId), integrations: getAllIntegrationHealth(orgId) })
+    async () => {
+      // One health query, reused for both the rollup and the list (getOverallHealth
+      // would recompute the same per-integration list a second time).
+      const integrations = getAllIntegrationHealth(orgId);
+      return ok({ health: summarizeHealth(integrations), integrations });
+    }
   );
 
   // list_integrations ----------------------------------------------------
@@ -177,40 +219,23 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
         resolution_status: enumOf(RESOLUTION_STATUSES)
           .optional()
           .describe('Filter by resolution state.'),
-        since: z.string().optional().describe('ISO 8601 timestamp; events at or after it.'),
         search: z.string().optional().describe('Free-text match across the event.'),
-        sort_by: enumOf(SORT_FIELDS).optional().describe('Sort field. Default timestamp.'),
-        sort_order: enumOf(SORT_ORDERS).optional().describe('Sort direction. Default desc.'),
-        limit: z
-          .number()
-          .int()
-          .optional()
-          .describe(`1-${MAX_LIMIT}, default ${DEFAULT_LIMIT}. Out-of-range values are clamped.`),
-        offset: z.number().int().optional().describe('Rows to skip. Default 0.'),
+        ...PAGINATION_SHAPE,
       },
       annotations: READ_ONLY,
     },
     async (args) => {
-      let since: Date | undefined;
-      if (args.since !== undefined) {
-        since = new Date(args.since);
-        if (Number.isNaN(since.getTime())) {
-          return toolError('invalid_query', 'since must be a valid ISO date');
-        }
-      }
+      const page = parsePagination(args);
+      if ('isError' in page) return page;
 
       return ok(
         getEventsPaginated({
           integration: args.integration,
           status: args.status,
           resolutionStatus: args.resolution_status as ResolutionStatus | undefined,
-          limit: clampInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
-          offset: clampInt(args.offset, 0, 0, Number.MAX_SAFE_INTEGER),
-          since,
-          sortBy: args.sort_by as SortField | undefined,
-          sortOrder: args.sort_order as SortOrder | undefined,
           search: args.search,
           orgId,
+          ...page,
         })
       );
     }
@@ -251,15 +276,7 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
         "A monitor's config plus the events its match spec currently selects (paginated, same event shape as query_events). Errors not_found on an unknown or another org's id.",
       inputSchema: {
         id: z.string().describe('The monitor id.'),
-        since: z.string().optional().describe('ISO 8601 timestamp; matching events at or after it.'),
-        sort_by: enumOf(SORT_FIELDS).optional().describe('Sort field. Default timestamp.'),
-        sort_order: enumOf(SORT_ORDERS).optional().describe('Sort direction. Default desc.'),
-        limit: z
-          .number()
-          .int()
-          .optional()
-          .describe(`1-${MAX_LIMIT}, default ${DEFAULT_LIMIT}. Out-of-range values are clamped.`),
-        offset: z.number().int().optional().describe('Rows to skip. Default 0.'),
+        ...PAGINATION_SHAPE,
       },
       annotations: READ_ONLY,
     },
@@ -267,22 +284,10 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
       const monitor = getMonitorForOrg(args.id, orgId);
       if (!monitor) return toolError('not_found', 'Monitor not found');
 
-      let since: Date | undefined;
-      if (args.since !== undefined) {
-        since = new Date(args.since);
-        if (Number.isNaN(since.getTime())) {
-          return toolError('invalid_query', 'since must be a valid ISO date');
-        }
-      }
+      const page = parsePagination(args);
+      if ('isError' in page) return page;
 
-      const matches = getMonitorMatches(orgId, monitor.matchSpec, {
-        limit: clampInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
-        offset: clampInt(args.offset, 0, 0, Number.MAX_SAFE_INTEGER),
-        since,
-        sortBy: args.sort_by as SortField | undefined,
-        sortOrder: args.sort_order as SortOrder | undefined,
-      });
-
+      const matches = getMonitorMatches(orgId, monitor.matchSpec, page);
       return ok({ monitor, ...matches });
     }
   );
@@ -309,10 +314,7 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
       const monitor = getMonitorForOrg(args.id, orgId);
       if (!monitor) return toolError('not_found', 'Monitor not found');
 
-      // Same clamping as routes/v1.ts GET /monitors/:id/series.
-      const windowMs = Math.max(HOUR_MS, Number(args.window) || 7 * DAY_MS);
-      let bucketMs = Math.max(60_000, Number(args.bucket) || HOUR_MS);
-      if (windowMs / bucketMs > MAX_BUCKETS) bucketMs = Math.ceil(windowMs / MAX_BUCKETS);
+      const { windowMs, bucketMs } = clampSeriesWindow(args.window, args.bucket);
 
       return ok({
         monitor,

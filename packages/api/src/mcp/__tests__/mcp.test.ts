@@ -215,6 +215,8 @@ describe('MCP server (read-token)', () => {
 
     it('query_events with a bad status returns isError (invalid input)', async () => {
       const client = await connect(secretA);
+      // A bad enum is rejected by zod at the SDK layer, so the error content is a
+      // plain MCP validation string (not our JSON envelope) - assert isError only.
       const result = (await client.callTool({
         name: 'query_events',
         arguments: { status: 'bogus' },
@@ -241,12 +243,11 @@ describe('MCP server (read-token)', () => {
 
     it('get_integration errors not_found for an unreported id', async () => {
       const client = await connect(secretA);
-      const result = (await client.callTool({
-        name: 'get_integration',
-        arguments: { id: 'does-not-exist' },
-      })) as { isError?: boolean; content: { text: string }[] };
-      expect(result.isError).toBe(true);
-      expect(JSON.parse(result.content[0].text).error.code).toBe('not_found');
+      const { isError, data } = parse(
+        await client.callTool({ name: 'get_integration', arguments: { id: 'does-not-exist' } })
+      );
+      expect(isError).toBe(true);
+      expect(data.error.code).toBe('not_found');
       await client.close();
     });
   });

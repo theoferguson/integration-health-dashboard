@@ -35,17 +35,27 @@ export function getAllIntegrationHealth(orgId?: string): Integration[] {
   return getDistinctIntegrations(orgId).map((id) => getIntegrationHealth(id, orgId));
 }
 
-export function getOverallHealth(orgId?: string): {
+export interface HealthRollup {
   totalIntegrations: number;
   healthy: number;
   degraded: number;
   down: number;
-} {
-  const all = getAllIntegrationHealth(orgId);
+}
+
+/**
+ * Roll up a list of integration healths into status counts. Split out so callers
+ * that already have the list (the /health route, the MCP get_health tool) can
+ * summarize it without re-querying every integration a second time.
+ */
+export function summarizeHealth(integrations: Integration[]): HealthRollup {
   return {
-    totalIntegrations: all.length,
-    healthy: all.filter((i) => i.status === 'healthy').length,
-    degraded: all.filter((i) => i.status === 'degraded').length,
-    down: all.filter((i) => i.status === 'down').length,
+    totalIntegrations: integrations.length,
+    healthy: integrations.filter((i) => i.status === 'healthy').length,
+    degraded: integrations.filter((i) => i.status === 'degraded').length,
+    down: integrations.filter((i) => i.status === 'down').length,
   };
+}
+
+export function getOverallHealth(orgId?: string): HealthRollup {
+  return summarizeHealth(getAllIntegrationHealth(orgId));
 }

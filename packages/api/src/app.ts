@@ -6,14 +6,13 @@ import { fileURLToPath } from 'url';
 import routes from './routes/index.js';
 import { renderLlmsTxt } from './services/apiContract.js';
 import { resolveBaseUrl } from './services/baseUrl.js';
-import { READ_MAX } from './middleware/rateLimit.js';
+import { READ_MAX, readIpRateLimiter, readTokenRateLimiter } from './middleware/rateLimit.js';
 import {
   mcpOriginGuard,
   requireMcpAuth,
   handleMcpPost,
   mcpMethodNotAllowed,
 } from './mcp/http.js';
-import { readIpRateLimiter, readTokenRateLimiter } from './middleware/rateLimit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
