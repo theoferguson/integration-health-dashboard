@@ -11,7 +11,7 @@
  * ids that org has actually reported) are assembled per-request in v1.ts.
  */
 
-import type { ResolutionStatus } from '../types/index.js';
+import type { ResolutionStatus, ErrorSeverity } from '../types/index.js';
 
 // ---- Enums + bounds (imported by v1.ts for validation) ------------------
 
@@ -33,7 +33,12 @@ export const ERROR_CATEGORIES = [
 ] as const;
 
 export const HEALTH_STATUSES = ['healthy', 'degraded', 'down'] as const;
-export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+/**
+ * Severity levels on `event.classification.severity`. Also the values the ingest
+ * path validates against - ingest.ts imports this, so the write validation and
+ * the read documentation can't drift. `satisfies` pins them to ErrorSeverity.
+ */
+export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const satisfies readonly ErrorSeverity[];
 
 export const MAX_LIMIT = 100;
 export const DEFAULT_LIMIT = 25;

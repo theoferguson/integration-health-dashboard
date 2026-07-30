@@ -3,12 +3,13 @@ import { getProjectByApiKey } from '../services/projectStore.js';
 import { createEvent, findEventByIdempotencyKey } from '../services/eventStore.js';
 import { ingestRateLimiter } from '../middleware/rateLimit.js';
 import type { EventError, EventStatus, ErrorSeverity } from '../types/index.js';
+// Shared with the read contract so ingest validation and the documented
+// vocabulary are the same list (see services/apiContract.ts).
+import { SEVERITIES } from '../services/apiContract.js';
 
 const router = Router();
 
 router.use(ingestRateLimiter);
-
-const SEVERITIES: ErrorSeverity[] = ['low', 'medium', 'high', 'critical'];
 
 // Cap the arbitrary payload blob at the trust boundary - bounds storage and
 // blunts abuse (open signup + unbounded store). The whole request is also

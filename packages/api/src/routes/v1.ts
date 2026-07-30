@@ -40,12 +40,14 @@ import {
   SORT_ORDERS,
   ERROR_CATEGORIES,
   HEALTH_STATUSES,
+  SEVERITIES,
   MAX_LIMIT,
   DEFAULT_LIMIT,
   V1_ENDPOINTS,
   boundaries,
   RECOMMENDED_WORKFLOW,
 } from '../services/apiContract.js';
+import { resolveBaseUrl } from '../services/baseUrl.js';
 
 const router = Router();
 
@@ -63,11 +65,10 @@ router.use(readTokenRateLimiter);
 // the advisory boundaries. Sits after the auth middleware, so it's scoped.
 router.get('/', (req, res) => {
   const orgId = readOrgId(res);
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.json({
     service: 'Integration Health Dashboard',
     apiVersion: 'v1',
-    docs: `${baseUrl}/llms.txt`,
+    docs: `${resolveBaseUrl(req)}/llms.txt`,
     you: {
       orgId,
       tokenName: readTokenName(res),
@@ -76,13 +77,24 @@ router.get('/', (req, res) => {
     },
     endpoints: V1_ENDPOINTS,
     vocabulary: {
-      integrations: getDistinctIntegrations(orgId),
-      status: EVENT_STATUSES,
-      resolutionStatus: RESOLUTION_STATUSES,
-      sortBy: SORT_FIELDS,
-      sortOrder: SORT_ORDERS,
-      healthStatus: HEALTH_STATUSES,
-      errorCategories: ERROR_CATEGORIES,
+      // Legal values for the GET /api/v1/events filters, keyed by the EXACT
+      // query-param name (snake_case) so an agent can copy a key straight into
+      // a query string. `integration` is the org's own live set.
+      filters: {
+        integration: getDistinctIntegrations(orgId),
+        status: EVENT_STATUSES,
+        resolution_status: RESOLUTION_STATUSES,
+        sort_by: SORT_FIELDS,
+        sort_order: SORT_ORDERS,
+      },
+      // Enums that appear in RESPONSES (health, classification), not filters -
+      // separated so an agent doesn't try ?health= or ?category= and have it
+      // silently ignored. These are for interpreting results.
+      responseValues: {
+        healthStatus: HEALTH_STATUSES,
+        errorCategory: ERROR_CATEGORIES,
+        severity: SEVERITIES,
+      },
     },
     limits: {
       maxLimit: MAX_LIMIT,

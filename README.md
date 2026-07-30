@@ -182,10 +182,13 @@ the emerging llms.txt → capability-doc convention:
   This is the file agents and crawlers look for; it describes the _shape_ of the
   API and never any org's data.
 - **`GET /api/v1`** (token-scoped) — a JSON capability document for _this caller_:
-  its org and token name, the **live filter vocabulary for that org** (integration
-  ids pulled from the org's own events, so filters are real rather than guessed),
-  every legal enum, the page-size cap, and the per-token rate budget. Undocumented
-  limits are the top agent failure mode, so the budget travels in the payload.
+  its org and token name, the org's **live filter values** (`vocabulary.filters`,
+  keyed by the real snake_case query-param names — `integration` is pulled from the
+  org's own events, so it's real rather than guessed), the enums that appear in
+  responses (`vocabulary.responseValues` — health, error category, severity — kept
+  apart from filters so agents don't invent `?category=`), the page-size cap, and
+  the per-token rate budget. Undocumented limits are the top agent failure mode, so
+  the budget travels in the payload.
 
 The contract (enums, bounds, endpoint list, boundaries) lives in one module,
 `services/apiContract.ts`, which `v1.ts` both **validates against and documents
@@ -308,6 +311,7 @@ The volume must exist before the first deploy (`fly deploy` won't create it from
 | `EVENT_RETENTION_DAYS` | Days before events are swept | No (default 60) |
 | `INGEST_RATE_LIMIT_PER_MIN` | Max ingest requests per project per minute | No (default 120) |
 | `READ_API_RATE_LIMIT_PER_MIN` | Max `/api/v1` read requests per token per minute | No (default 300) |
+| `PUBLIC_BASE_URL` | Canonical public origin for the discovery docs' self-links (e.g. `https://integration-health-dashboard.fly.dev`) | Recommended in prod (falls back to the request Host) |
 | `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App | Only for sign-in |
 | `SESSION_SECRET` | Signs the session cookie | Only for sign-in (insecure dev default otherwise) |
 

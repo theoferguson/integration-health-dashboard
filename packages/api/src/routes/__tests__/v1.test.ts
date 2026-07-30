@@ -151,15 +151,27 @@ describe('/api/v1 read API', () => {
       expect(res.body.endpoints.length).toBeGreaterThan(0);
     });
 
+    it('keys the filter vocabulary by the real snake_case query-param names', async () => {
+      const res = await request(app).get('/api/v1').set(auth(secretA));
+      // These keys must be copyable straight into a ?query string.
+      expect(res.body.vocabulary.filters).toHaveProperty('resolution_status');
+      expect(res.body.vocabulary.filters).toHaveProperty('sort_by');
+      expect(res.body.vocabulary.filters).toHaveProperty('sort_order');
+      // Response-only enums live apart from filters, so nobody tries ?category=.
+      expect(res.body.vocabulary.responseValues).toHaveProperty('healthStatus');
+      expect(res.body.vocabulary.responseValues.severity).toContain('critical');
+      expect(res.body.vocabulary.filters).not.toHaveProperty('errorCategory');
+    });
+
     it('scopes the live integration vocabulary per org (no cross-org leak)', async () => {
       const a = await request(app).get('/api/v1').set(auth(secretA));
       const b = await request(app).get('/api/v1').set(auth(secretB));
 
       // Org A reported 'weather', org B reported 'stripe'. Each sees only its own.
-      expect(a.body.vocabulary.integrations).toContain('weather');
-      expect(a.body.vocabulary.integrations).not.toContain('stripe');
-      expect(b.body.vocabulary.integrations).toContain('stripe');
-      expect(b.body.vocabulary.integrations).not.toContain('weather');
+      expect(a.body.vocabulary.filters.integration).toContain('weather');
+      expect(a.body.vocabulary.filters.integration).not.toContain('stripe');
+      expect(b.body.vocabulary.filters.integration).toContain('stripe');
+      expect(b.body.vocabulary.filters.integration).not.toContain('weather');
     });
   });
 
