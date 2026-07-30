@@ -131,6 +131,19 @@ describe('/api/v1 read API', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('invalid_query');
     });
+
+    it('ignores an unknown param but warns instead of erroring or filtering', async () => {
+      const res = await request(app).get('/api/v1/events?category=auth').set(auth(secretA));
+      expect(res.status).toBe(200); // cheap discovery - not rejected
+      expect(Array.isArray(res.body.warnings)).toBe(true);
+      expect(res.body.warnings[0]).toContain('category');
+    });
+
+    it('omits warnings entirely when all params are recognized', async () => {
+      const res = await request(app).get('/api/v1/events?status=success&limit=5').set(auth(secretA));
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty('warnings');
+    });
   });
 
   describe('capability document (GET /api/v1)', () => {

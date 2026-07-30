@@ -194,6 +194,22 @@ router.get('/events', (req, res) => {
     orgId: readOrgId(res),
   });
 
+  // Advisory feedback, not rejection. Unknown params are ignored so discovery
+  // stays cheap (an agent probing filters never eats a 400), but a guessed or
+  // typo'd filter like ?category= would otherwise return an unfiltered set that
+  // *looks* filtered - the silent-wrong-answer failure mode. So we surface it on
+  // the same response, pointing back at the discovery doc. STRING_PARAMS is the
+  // recognized set, so this can't drift from what's actually honored.
+  const unknown = Object.keys(q).filter((k) => !(STRING_PARAMS as readonly string[]).includes(k));
+  if (unknown.length > 0) {
+    return res.json({
+      ...result,
+      warnings: [
+        `Ignored unrecognized query parameter(s): ${unknown.join(', ')}. Valid filters are listed at GET /api/v1 under vocabulary.filters.`,
+      ],
+    });
+  }
+
   res.json(result);
 });
 
