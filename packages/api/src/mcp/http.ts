@@ -78,12 +78,25 @@ export async function handleMcpPost(req: Request, res: Response): Promise<void> 
   // 3. One stateless transport + server per request. No session id (stateless
   // mode), so nothing is shared between callers; the server closes over ctx.orgId
   // for request scoping. The SDK transport negotiates MCP-Protocol-Version.
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  res.on('close', () => {
-    void transport.close();
-  });
+  //
+  // Guard the whole transport dance: this is an async Express handler, and
+  // Express 4 does NOT catch rejected promises - an unhandled throw here (from
+  // buildMcpServer/connect, or before the transport has written) would leave the
+  // socket hanging with no response. Match the house rule (structured errors,
+  // never a leaked stack): reply 500 { error } if nothing has been sent yet.
+  try {
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    res.on('close', () => {
+      void transport.close();
+    });
 
-  const server = buildMcpServer(ctx);
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+    const server = buildMcpServer(ctx);
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error('[mcp] request failed:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: { code: 'internal', message: 'Internal error' } });
+    }
+  }
 }
