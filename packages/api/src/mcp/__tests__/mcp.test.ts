@@ -91,25 +91,36 @@ describe('MCP server (read-token)', () => {
 
   // ---- The swappable auth boundary (mcp/auth.ts) ------------------------
   describe('resolveMcpAuth', () => {
-    it('resolves a valid token to its org and token name', () => {
-      expect(resolveMcpAuth(bearerReq(secretA))).toEqual({ orgId: orgAId, tokenName: 'agent-a' });
+    it('resolves a valid token to its org, token id, and name', () => {
+      expect(resolveMcpAuth(bearerReq(secretA))).toEqual({
+        ok: true,
+        orgId: orgAId,
+        tokenId: tokenAId,
+        tokenName: 'agent-a',
+      });
     });
 
-    it('returns null for a missing token', () => {
-      expect(resolveMcpAuth(bearerReq(undefined))).toBeNull();
+    it('reports unauthorized for a missing token (distinct from invalid)', () => {
+      const r = resolveMcpAuth(bearerReq(undefined));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe('unauthorized');
     });
 
-    it('returns null for a garbage token', () => {
-      expect(resolveMcpAuth(bearerReq('ihd_read_nope'))).toBeNull();
+    it('reports invalid_token for a garbage token', () => {
+      const r = resolveMcpAuth(bearerReq('ihd_read_nope'));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe('invalid_token');
     });
 
-    it('returns null for a revoked token', () => {
+    it('reports invalid_token for a revoked token', () => {
       const u = findOrCreateUser(`mcp-rev-${Math.random()}`);
       const org = createOrgForUser(u.id, 'Rev Org');
       const t = createReadToken(org.id, 'to-revoke');
-      expect(resolveMcpAuth(bearerReq(t.secret))).not.toBeNull();
+      expect(resolveMcpAuth(bearerReq(t.secret)).ok).toBe(true);
       revokeReadTokenForOrg(t.token.id, org.id);
-      expect(resolveMcpAuth(bearerReq(t.secret))).toBeNull();
+      const r = resolveMcpAuth(bearerReq(t.secret));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe('invalid_token');
     });
   });
 
@@ -122,6 +133,15 @@ describe('MCP server (read-token)', () => {
       expect(res.body.error.code).toBe('unauthorized');
     });
 
+    it('401s (invalid_token) on a revoked/garbage token, matching the HTTP door vocabulary', async () => {
+      const res = await request(app)
+        .post('/mcp')
+        .set('Authorization', 'Bearer ihd_read_nope')
+        .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('invalid_token');
+    });
+
     it('403s on a disallowed Origin (DNS-rebinding defense)', async () => {
       const res = await request(app)
         .post('/mcp')
@@ -130,6 +150,31 @@ describe('MCP server (read-token)', () => {
         .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
       expect(res.status).toBe(403);
       expect(res.body.error.code).toBe('forbidden');
+    });
+
+    it('allows a loopback Origin on any port (not 403) — Inspector/dev UI', async () => {
+      // Ported localhost must pass the Origin guard; with no token it then 401s,
+      // proving the guard accepted the origin (a 403 would mean it was rejected).
+      const res = await request(app)
+        .post('/mcp')
+        .set('Origin', 'http://localhost:6274')
+        .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+      expect(res.status).toBe(401);
+    });
+
+    it('applies the per-IP read limiter (RateLimit-* headers present on the gate)', async () => {
+      // The IP limiter runs before auth, so even a 401 carries its headers -
+      // proof the MCP door is under the same ceiling as /api/v1.
+      const res = await request(app).post('/mcp').send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+      expect(res.status).toBe(401);
+      expect(res.headers['ratelimit-policy'] ?? res.headers['ratelimit']).toBeDefined();
+    });
+
+    it('405s (Allow: POST) on a non-POST method instead of the SPA shell', async () => {
+      const res = await request(app).get('/mcp');
+      expect(res.status).toBe(405);
+      expect(res.headers['allow']).toBe('POST');
+      expect(res.body.error.code).toBe('method_not_allowed');
     });
   });
 

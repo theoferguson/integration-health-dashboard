@@ -7,7 +7,13 @@ import routes from './routes/index.js';
 import { renderLlmsTxt } from './services/apiContract.js';
 import { resolveBaseUrl } from './services/baseUrl.js';
 import { READ_MAX } from './middleware/rateLimit.js';
-import { handleMcpPost } from './mcp/http.js';
+import {
+  mcpOriginGuard,
+  requireMcpAuth,
+  handleMcpPost,
+  mcpMethodNotAllowed,
+} from './mcp/http.js';
+import { readIpRateLimiter, readTokenRateLimiter } from './middleware/rateLimit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,12 +53,22 @@ export function createApp() {
 
   // Remote MCP server over the /api/v1 read surface (ROADMAP #11, Phase 1). Same
   // reasoning as /llms.txt above: MUST be registered before the static/SPA block,
-  // or in production POST /mcp would fall through to the `app.get('*')` shell.
-  // The global express.json() above already parsed req.body, which the transport
-  // consumes. GET/DELETE to /mcp fall through to the SDK's default 405 semantics
-  // via the transport - here we only wire POST. Auth + Origin checks live in the
-  // handler (mcp/http.ts); the swappable auth boundary is mcp/auth.ts.
-  app.post('/mcp', handleMcpPost);
+  // or in production /mcp would fall through to the `app.get('*')` shell. The
+  // global express.json() above already parsed req.body, which the transport
+  // consumes. The chain mirrors the /api/v1 door and REUSES the same limiter
+  // instances, so a read token's budget is shared across both doors (no doubling
+  // by hitting both): origin guard -> per-IP ceiling -> auth (sets tokenId) ->
+  // per-token budget -> transport. The swappable auth boundary is mcp/auth.ts.
+  app.post(
+    '/mcp',
+    mcpOriginGuard,
+    readIpRateLimiter,
+    requireMcpAuth,
+    readTokenRateLimiter,
+    handleMcpPost
+  );
+  // Non-POST /mcp gets a clean 405 instead of the SPA HTML shell.
+  app.all('/mcp', mcpMethodNotAllowed);
 
   // Serve static frontend in production
   if (process.env.NODE_ENV === 'production') {

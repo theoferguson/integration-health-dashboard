@@ -11,8 +11,8 @@
  *
  * Phase 4 replaces the BODY of resolveMcpAuth with OAuth access-token validation
  * (audience-checked per RFC 8707); the tools and transport wiring below never
- * change. Keep the return shape (`McpAuthContext | null`) and the bearer-parsing
- * contract stable so that swap stays local to this function.
+ * change. Keep the return shape (`McpAuthResult`) and the bearer-parsing contract
+ * stable so that swap stays local to this function.
  */
 
 import type { Request } from 'express';
@@ -25,6 +25,17 @@ export interface McpAuthContext {
 }
 
 /**
+ * The outcome of authenticating an MCP request. On success it carries the org
+ * context plus the `tokenId` the per-token rate limiter keys on; on failure it
+ * carries the distinct code the HTTP door already uses (`unauthorized` for a
+ * missing credential, `invalid_token` for a bad/revoked one) so both doors speak
+ * the same error vocabulary.
+ */
+export type McpAuthResult =
+  | ({ ok: true; tokenId: string } & McpAuthContext)
+  | { ok: false; code: 'unauthorized' | 'invalid_token'; message: string };
+
+/**
  * Extract the Bearer token exactly as middleware/readAuth does, so the MCP door
  * and the HTTP door parse credentials identically.
  */
@@ -34,17 +45,28 @@ function bearerToken(req: Request): string | null {
 }
 
 /**
- * Resolve an MCP request to its org context, or null if unauthenticated.
+ * Resolve an MCP request to its org context, or a typed failure.
  *
  * Phase 4 swaps the implementation below (read-token lookup) for OAuth
- * access-token validation without changing this signature.
+ * access-token validation without changing this signature. NOTE: verifyReadToken
+ * does synchronous better-sqlite3 I/O and can throw (SQLITE_BUSY, disk error);
+ * callers MUST run this inside a try/catch (see mcp/http.requireMcpAuth) so a DB
+ * blip becomes a structured 500, not an unhandled rejection.
  */
-export function resolveMcpAuth(req: Request): McpAuthContext | null {
+export function resolveMcpAuth(req: Request): McpAuthResult {
   const token = bearerToken(req);
-  if (!token) return null;
+  if (!token) {
+    return {
+      ok: false,
+      code: 'unauthorized',
+      message: 'Provide a read token via Authorization: Bearer <token>',
+    };
+  }
 
   const ctx = verifyReadToken(token);
-  if (!ctx) return null;
+  if (!ctx) {
+    return { ok: false, code: 'invalid_token', message: 'Invalid or revoked read token' };
+  }
 
-  return { orgId: ctx.orgId, tokenName: ctx.name };
+  return { ok: true, orgId: ctx.orgId, tokenId: ctx.tokenId, tokenName: ctx.name };
 }
