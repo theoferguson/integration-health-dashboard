@@ -97,7 +97,7 @@ describe('oauthProviders.fetchProfile', () => {
   });
 
   describe('facebook', () => {
-    it('maps id/name/email/picture from the graph endpoint', async () => {
+    it('maps id/name/email/picture but NEVER marks the email verified', async () => {
       stubFetch({
         'graph.facebook.com/me': {
           id: 'fb-9999',
@@ -111,7 +111,9 @@ describe('oauthProviders.fetchProfile', () => {
       expect(profile).toEqual({
         providerUserId: 'fb-9999',
         email: 'grace@fb.example',
-        emailVerified: true, // Facebook only returns a confirmed email
+        // Deliberate: Facebook has no verified flag, so we never trust its email
+        // for account-linking - a Facebook sign-in always gets its own account.
+        emailVerified: false,
         avatarUrl: 'https://graph.example/grace.png',
         name: 'Grace Hopper',
       });

@@ -150,13 +150,16 @@ export const oauthProviders: Record<OAuthProviderId, OAuthProviderConfig> = {
         email?: string | null;
         picture?: { data?: { url?: string | null } };
       };
-      const email = info.email ?? null;
       return {
         providerUserId: info.id ?? '',
-        email,
-        // Facebook has no explicit verified flag, but it only returns an email
-        // the account has confirmed - so a present email is a verified one.
-        emailVerified: email !== null,
+        email: info.email ?? null,
+        // DELIBERATE (product decision): Facebook exposes no explicit
+        // email-verified flag, so we never treat its email as verified. Because
+        // emailVerified gates cross-provider account-linking, a Facebook sign-in
+        // therefore NEVER auto-links to a Google/GitHub account - it always gets
+        // its own account, and the (untrusted) email is dropped by userStore
+        // rather than stored as a linkable key. Zero Facebook-based takeover risk.
+        emailVerified: false,
         name: info.name ?? null,
         avatarUrl: info.picture?.data?.url ?? null,
       };
