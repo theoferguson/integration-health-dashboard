@@ -198,39 +198,29 @@ from** — so a filter can't ship documented-but-unvalidated, or the reverse.
 ### MCP server
 
 A remote **streamable-HTTP MCP server** (`POST /mcp`) exposes the same read
-surface as one-per-action MCP tools, so an agent in an MCP host can call them
+surface as one-per-action MCP tools (`get_health`, `list_integrations`,
+`get_integration`, `query_events`, `get_event`, `list_monitors`, `get_monitor`,
+`get_monitor_series`), so an agent in an MCP host can call the dashboard's data
 directly instead of constructing HTTP requests. It wraps the exact service
-functions `/api/v1` uses, so query semantics never fork between the two doors.
-Auth is the **same org-scoped `ihd_read_*` read token** (Phase 1); every tool is
-annotated `readOnlyHint` and scoped to the token's org.
+functions `/api/v1` uses, so query semantics never fork between the two doors;
+every tool is `readOnlyHint` and scoped to the caller's org.
 
-Add it in Claude Code (once deployed):
+**Two ways to connect** — one works today, one is planned:
 
-```bash
-claude mcp add --transport http ihd \
-  https://integration-health-dashboard.fly.dev/mcp \
-  --header "Authorization: Bearer ihd_read_..."
-```
+- ✅ **Read token (now).** Paste an `ihd_read_*` bearer token. Works in Claude
+  Code, the MCP Inspector, and any header-capable host:
+  ```bash
+  claude mcp add --transport http --scope user ihd \
+    https://integration-health-dashboard.fly.dev/mcp \
+    --header "Authorization: Bearer ihd_read_your_token"
+  ```
+- 🚧 **Browser sign-in / OAuth (planned, Phase 4).** The one-click
+  "Add connector → sign in" flow for Claude.ai / Desktop / ChatGPT (which don't
+  accept a pasted token). The auth check lives behind a single swappable boundary
+  (`mcp/auth.ts`), so the tools and transport don't change when it lands.
 
-Tools (each maps to the `/api/v1` endpoint of the same shape):
-
-| Tool | Does |
-| --- | --- |
-| `get_health` | Whole-org rollup + per-integration health. Start here. |
-| `list_integrations` | Every integration with its health status. |
-| `get_integration` | One integration's health + 20 recent events (`id`). |
-| `query_events` | Paginated, filterable events (`integration`, `status`, `resolution_status`, `since`, `search`, `sort_by`, `sort_order`, `limit`, `offset`). |
-| `get_event` | A single event by `id`. |
-| `list_monitors` | The org's saved monitors + last-24h activity. |
-| `get_monitor` | A monitor's config + the events its spec matches (`id`, paginated). |
-| `get_monitor_series` | A monitor's matching-event time series (`id`, `window`, `bucket`). |
-
-Because Claude.ai / Claude Desktop one-click connectors don't accept a
-user-pasted bearer token, this Phase-1 server targets **Claude Code** (`--header`),
-the **MCP Inspector**, and other header-capable hosts. Browser-based **OAuth
-sign-in for the one-click connectors is the planned Phase 4** — the auth check
-lives behind a single swappable boundary (`mcp/auth.ts`) so the tools and
-transport don't change when it lands.
+📖 **Full walkthrough — getting a token, adding it in each host, example prompts,
+boundaries, troubleshooting, and the planned OAuth path: [docs/CONNECTING-MCP.md](./docs/CONNECTING-MCP.md).**
 
 ## Why AI (and why not everywhere)
 
