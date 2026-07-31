@@ -18,11 +18,36 @@ export const db: Database.Database = new Database(resolveDbPath());
 db.pragma('journal_mode = WAL');
 
 db.exec(`
+  -- A user is provider-agnostic (Phase 2): identified by its linked identities,
+  -- not by a GitHub login. github_login is nullable (a Google/email user has
+  -- none) but still UNIQUE and still written for GitHub sign-ins. (email/name/
+  -- avatar_url are added by the migration below for tables that predate them.)
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    github_login TEXT UNIQUE NOT NULL,
+    github_login TEXT UNIQUE,
+    email TEXT,
+    name TEXT,
+    avatar_url TEXT,
     created_at INTEGER NOT NULL
   );
+
+  -- Federated identities: one row per (provider, provider account) linked to a
+  -- user. A user can have several (GitHub + Google + email, ...), which is how
+  -- one person signs in via multiple providers and lands on the same account.
+  -- provider_user_id is the provider's stable id (for legacy GitHub rows it's the
+  -- github_login we historically stored). See services/userStore.
+  CREATE TABLE IF NOT EXISTS identities (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    provider TEXT NOT NULL,
+    provider_user_id TEXT NOT NULL,
+    email TEXT,
+    created_at INTEGER NOT NULL,
+    UNIQUE (provider, provider_user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_identities_user ON identities(user_id);
+  CREATE INDEX IF NOT EXISTS idx_identities_email ON identities(email);
 
   CREATE TABLE IF NOT EXISTS orgs (
     id TEXT PRIMARY KEY,
@@ -121,6 +146,32 @@ for (const col of ['metrics', 'tags', 'environment', 'severity', 'source']) {
   if (!eventColumns.some((c) => c.name === col)) {
     db.exec(`ALTER TABLE events ADD COLUMN ${col} TEXT`);
   }
+}
+
+// Identity generalization (Phase 2): a user is no longer defined by its GitHub
+// login. Add provider-agnostic profile columns (additive - github_login stays,
+// still written for GitHub sign-ins and used by the legacy org backfill below).
+const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+for (const col of ['email', 'name', 'avatar_url']) {
+  if (!userColumns.some((c) => c.name === col)) {
+    db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
+  }
+}
+
+// Backfill a 'github' identity for every existing user (keyed on the github_login
+// we already stored), so the new identities table has a row for each legacy
+// account and nobody is stranded. Idempotent: only users with no identity yet.
+const usersNeedingIdentity = db
+  .prepare(
+    `SELECT id, github_login FROM users
+     WHERE github_login IS NOT NULL AND id NOT IN (SELECT user_id FROM identities)`
+  )
+  .all() as { id: string; github_login: string }[];
+for (const u of usersNeedingIdentity) {
+  db.prepare(
+    `INSERT OR IGNORE INTO identities (id, user_id, provider, provider_user_id, email, created_at)
+     VALUES (?, ?, 'github', ?, NULL, ?)`
+  ).run(randomUUID(), u.id, u.github_login, Date.now());
 }
 
 // Backfill: every user without an org membership gets an auto-created personal

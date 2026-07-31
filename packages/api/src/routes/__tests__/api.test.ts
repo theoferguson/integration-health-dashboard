@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../app.js';
 import { clearEvents, createEvent } from '../../services/eventStore.js';
-import { findOrCreateUser } from '../../services/userStore.js';
+import { findOrCreateUser, displayName } from '../../services/userStore.js';
 import { createOrgForUser, getMembershipForUser, joinOrgByCode } from '../../services/orgStore.js';
 import { createProject } from '../../services/projectStore.js';
 import { createSessionToken } from '../../services/authToken.js';
@@ -21,7 +21,7 @@ beforeEach(() => {
   const user = findOrCreateUser(`api-test-user-${orgSeq++}`);
   const org = createOrgForUser(user.id, `${user.githubLogin}'s org`);
   projectId = createProject('api-test-project', org.id).id;
-  cookie = `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  cookie = `ihd_session=${createSessionToken(user.id, displayName(user))}`;
 });
 
 /** createEvent scoped to this test's org project. */
@@ -468,7 +468,7 @@ describe('API Integration Tests', () => {
       )!.org;
       const viewer = findOrCreateUser(`viewer-${orgSeq}`);
       joinOrgByCode(viewer.id, org.inviteCode);
-      const viewerCookie = `ihd_session=${createSessionToken(viewer.id, viewer.githubLogin)}`;
+      const viewerCookie = `ihd_session=${createSessionToken(viewer.id, displayName(viewer))}`;
 
       const event = ev({ integration: 'weather', eventType: 'test', status: 'failure', payload: {} });
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../app.js';
 import { createSessionToken } from '../../services/authToken.js';
-import { findOrCreateUser } from '../../services/userStore.js';
+import { findOrCreateUser, displayName } from '../../services/userStore.js';
 import { createOrgForUser, joinOrgByCode, getMembershipForUser } from '../../services/orgStore.js';
 import { createProject } from '../../services/projectStore.js';
 
@@ -12,20 +12,20 @@ const app = createApp();
 function adminCookieFor(login: string): string {
   const user = findOrCreateUser(login);
   createOrgForUser(user.id, `${login}'s org`);
-  return `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  return `ihd_session=${createSessionToken(user.id, displayName(user))}`;
 }
 
 /** Creates a user with no org membership at all. */
 function orglessCookieFor(login: string): string {
   const user = findOrCreateUser(login);
-  return `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  return `ihd_session=${createSessionToken(user.id, displayName(user))}`;
 }
 
 /** Creates a user who joins an existing org as a viewer via its invite code. */
 function viewerCookieFor(login: string, inviteCode: string): string {
   const user = findOrCreateUser(login);
   joinOrgByCode(user.id, inviteCode);
-  return `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  return `ihd_session=${createSessionToken(user.id, displayName(user))}`;
 }
 
 function inviteCodeForAdmin(adminLogin: string): string {

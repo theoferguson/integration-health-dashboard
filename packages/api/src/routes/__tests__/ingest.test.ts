@@ -3,7 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../app.js';
 import { clearEvents } from '../../services/eventStore.js';
 import { createProject, type Project } from '../../services/projectStore.js';
-import { findOrCreateUser } from '../../services/userStore.js';
+import { findOrCreateUser, displayName } from '../../services/userStore.js';
 import { createOrgForUser } from '../../services/orgStore.js';
 import { createSessionToken } from '../../services/authToken.js';
 
@@ -19,7 +19,7 @@ describe('POST /api/ingest', () => {
     const user = findOrCreateUser(`ingest-test-user-${seq++}`);
     const org = createOrgForUser(user.id, `${user.githubLogin}'s org`);
     project = createProject(`test-project-${Math.random()}`, org.id);
-    cookie = `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+    cookie = `ihd_session=${createSessionToken(user.id, displayName(user))}`;
   });
 
   const validBody = {
