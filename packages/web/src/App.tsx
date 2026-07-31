@@ -96,12 +96,7 @@ function App() {
                   {org ? `${org.name} · ` : ''}Signed in as {auth.login} · Sign out
                 </button>
               ) : (
-                <a
-                  href="/api/auth/login"
-                  className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800"
-                >
-                  Sign in with GitHub
-                </a>
+                <SignInButtons />
               )}
               <a
                 href="https://github.com/theoferguson/integration-health-dashboard"
@@ -154,14 +149,9 @@ function App() {
               </p>
             )}
             {!auth?.loggedIn && (
-              <p className="mt-3">
-                <a
-                  href="/api/auth/login"
-                  className="inline-block px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800"
-                >
-                  Sign in with GitHub
-                </a>
-              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SignInButtons />
+              </div>
             )}
           </div>
         )}
@@ -267,6 +257,30 @@ function App() {
 }
 
 // ============ Helper Components ============
+
+// Social sign-in buttons. Each links to the provider's generic OAuth entry point
+// (/api/auth/login/<provider>); the API redirects on from there.
+const SIGN_IN_PROVIDERS: { id: string; label: string }[] = [
+  { id: 'google', label: 'Continue with Google' },
+  { id: 'facebook', label: 'Continue with Facebook' },
+  { id: 'github', label: 'Continue with GitHub' },
+];
+
+function SignInButtons() {
+  return (
+    <>
+      {SIGN_IN_PROVIDERS.map((p) => (
+        <a
+          key={p.id}
+          href={`/api/auth/login/${p.id}`}
+          className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800 whitespace-nowrap"
+        >
+          {p.label}
+        </a>
+      ))}
+    </>
+  );
+}
 
 interface TabButtonProps {
   active: boolean;
