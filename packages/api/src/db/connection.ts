@@ -38,6 +38,10 @@ db.exec(`
   -- (what we've always stored); note GitHub logins are renameable, so a rename
   -- looks like a new identity and re-links via the verified email. See
   -- services/userStore.
+  -- TODO(rename-stability): key GitHub identities on the STABLE numeric ghUser.id
+  -- instead of the login. Deferred because legacy rows only stored the login;
+  -- doing it right needs a dual-key lookback (match id OR login, then migrate the
+  -- row to the id on next sign-in) so existing accounts aren't stranded.
   CREATE TABLE IF NOT EXISTS identities (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
