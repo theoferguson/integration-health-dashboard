@@ -157,15 +157,57 @@ for (const col of ['metrics', 'tags', 'environment', 'severity', 'source']) {
 // Identity generalization (Phase 2): a user is no longer defined by its GitHub
 // login. Add provider-agnostic profile columns (additive - github_login stays,
 // still written for GitHub sign-ins and used by the legacy org backfill below).
-const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+const userColumns = db.prepare('PRAGMA table_info(users)').all() as {
+  name: string;
+  notnull: number;
+}[];
 for (const col of ['email', 'name', 'avatar_url']) {
   if (!userColumns.some((c) => c.name === col)) {
     db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
   }
 }
+
+// Non-GitHub sign-in unblock (Phase 3): relax github_login NOT NULL on existing
+// prod DBs. Fresh DBs already declare it nullable (see the CREATE above), but the
+// original prod table was `github_login TEXT UNIQUE NOT NULL` and CREATE IF NOT
+// EXISTS is a no-op there - so inserting a Google/Facebook user (github_login =
+// NULL) would violate NOT NULL. SQLite can't ALTER a column's nullability, so we
+// run the standard 12-step table rebuild. GUARDED + idempotent: only rebuild when
+// PRAGMA reports github_login as notnull=1, so this is skipped on fresh/already-
+// migrated DBs. Runs AFTER the email/name/avatar ALTER above so those columns are
+// guaranteed present for the row-copy. Every row + id is preserved, so the
+// org_memberships / projects / read_tokens FK references to users(id) still hold.
+const githubLoginCol = (
+  db.prepare('PRAGMA table_info(users)').all() as { name: string; notnull: number }[]
+).find((c) => c.name === 'github_login');
+if (githubLoginCol?.notnull === 1) {
+  const rebuild = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        github_login TEXT UNIQUE,
+        email TEXT,
+        name TEXT,
+        avatar_url TEXT,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO users_new (id, github_login, email, name, avatar_url, created_at)
+        SELECT id, github_login, email, name, avatar_url, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `);
+  });
+  // foreign_keys must be toggled OUTSIDE the transaction (the pragma is a no-op
+  // mid-transaction), so the DROP TABLE users isn't blocked by the FK references.
+  db.pragma('foreign_keys = OFF');
+  rebuild();
+  db.pragma('foreign_keys = ON');
+}
+
 // Enforce one account per verified email (the account-linking key). Partial so
-// the many null emails stay allowed. Created AFTER the ALTER above so the column
-// exists on upgraded prod DBs. Safe on existing data: legacy users have email=NULL.
+// the many null emails stay allowed. Created AFTER the ALTER + rebuild above so
+// the column exists and the index (dropped with the old table in a rebuild) is
+// recreated. Safe on existing data: legacy users have email=NULL.
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
 
 // Backfill a 'github' identity for every existing user (keyed on the github_login
