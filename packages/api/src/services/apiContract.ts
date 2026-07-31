@@ -43,6 +43,38 @@ export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const satisfi
 export const MAX_LIMIT = 100;
 export const DEFAULT_LIMIT = 25;
 
+// ---- Shared clamps (imported by both read doors: v1.ts and the MCP tools) ----
+
+/** Coerce, floor, and bound a pagination value - never reject. */
+export function clampInt(value: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+/** Cap on monitor-series points; past it the bucket widens so payloads stay bounded. */
+export const MONITOR_SERIES_MAX_BUCKETS = 500;
+
+/**
+ * Clamp a monitor-series window/bucket to sane bounds: window >= 1h (default 7d),
+ * bucket >= 1min (default 1h), widened so the series never exceeds
+ * MONITOR_SERIES_MAX_BUCKETS points. Both read doors call this, so their series
+ * bucketing can't diverge.
+ */
+export function clampSeriesWindow(
+  window: unknown,
+  bucket: unknown
+): { windowMs: number; bucketMs: number } {
+  const windowMs = Math.max(HOUR_MS, Number(window) || 7 * DAY_MS);
+  let bucketMs = Math.max(60_000, Number(bucket) || HOUR_MS);
+  if (windowMs / bucketMs > MONITOR_SERIES_MAX_BUCKETS) {
+    bucketMs = Math.ceil(windowMs / MONITOR_SERIES_MAX_BUCKETS);
+  }
+  return { windowMs, bucketMs };
+}
+
 /**
  * Agents that poll at UI cadence burn their rate budget for no benefit: health
  * rollups recompute from the same 24h windows and rarely move minute to minute.

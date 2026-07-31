@@ -14,7 +14,8 @@ export function apiError(res: Response, status: number, code: string, message: s
   res.status(status).json({ error: { code, message } });
 }
 
-function bearerToken(req: Request): string | null {
+/** Extract a `Bearer <token>` credential, or null. Shared by both read doors. */
+export function bearerToken(req: Request): string | null {
   const header = req.header('authorization') || '';
   return header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : null;
 }

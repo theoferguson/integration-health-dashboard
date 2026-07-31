@@ -18,7 +18,7 @@ import {
   type SortOrder,
 } from '../services/eventStore.js';
 import {
-  getOverallHealth,
+  summarizeHealth,
   getAllIntegrationHealth,
   getIntegrationHealth,
 } from '../services/healthCalculator.js';
@@ -47,6 +47,8 @@ import {
   V1_ENDPOINTS,
   boundaries,
   RECOMMENDED_WORKFLOW,
+  clampInt,
+  clampSeriesWindow,
 } from '../services/apiContract.js';
 import { resolveBaseUrl } from '../services/baseUrl.js';
 
@@ -107,12 +109,6 @@ router.get('/', (req, res) => {
   });
 });
 
-function clampInt(value: unknown, fallback: number, min: number, max: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, Math.floor(n)));
-}
-
 /**
  * Advisory (non-fatal) notice naming any query params not in `recognized`.
  * Unknown params are ignored, not rejected - so discovery stays cheap - but a
@@ -135,8 +131,8 @@ function unknownParamWarnings(
 
 // GET /api/v1/health - overall rollup + per-integration health.
 router.get('/health', (req, res) => {
-  const orgId = readOrgId(res);
-  res.json({ health: getOverallHealth(orgId), integrations: getAllIntegrationHealth(orgId) });
+  const integrations = getAllIntegrationHealth(readOrgId(res));
+  res.json({ health: summarizeHealth(integrations), integrations });
 });
 
 // ---- Integrations -------------------------------------------------------
@@ -228,10 +224,6 @@ router.get('/events/:id', (req, res) => {
 
 // ---- Monitors -----------------------------------------------------------
 
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-const MAX_BUCKETS = 500;
-
 // GET /api/v1/monitors - the org's saved monitors.
 router.get('/monitors', (req, res) => {
   res.json({ monitors: listMonitorsForOrg(readOrgId(res)) });
@@ -288,9 +280,7 @@ router.get('/monitors/:id/series', (req, res) => {
   const monitor = getMonitorForOrg(req.params.id, orgId);
   if (!monitor) return apiError(res, 404, 'not_found', 'Monitor not found');
 
-  const windowMs = Math.max(HOUR_MS, Number(req.query.window) || 7 * DAY_MS);
-  let bucketMs = Math.max(60_000, Number(req.query.bucket) || HOUR_MS);
-  if (windowMs / bucketMs > MAX_BUCKETS) bucketMs = Math.ceil(windowMs / MAX_BUCKETS);
+  const { windowMs, bucketMs } = clampSeriesWindow(req.query.window, req.query.bucket);
 
   res.json({
     monitor,

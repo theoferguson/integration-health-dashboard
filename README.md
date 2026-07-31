@@ -195,6 +195,43 @@ The contract (enums, bounds, endpoint list, boundaries) lives in one module,
 `services/apiContract.ts`, which `v1.ts` both **validates against and documents
 from** — so a filter can't ship documented-but-unvalidated, or the reverse.
 
+### MCP server
+
+A remote **streamable-HTTP MCP server** (`POST /mcp`) exposes the same read
+surface as one-per-action MCP tools, so an agent in an MCP host can call them
+directly instead of constructing HTTP requests. It wraps the exact service
+functions `/api/v1` uses, so query semantics never fork between the two doors.
+Auth is the **same org-scoped `ihd_read_*` read token** (Phase 1); every tool is
+annotated `readOnlyHint` and scoped to the token's org.
+
+Add it in Claude Code (once deployed):
+
+```bash
+claude mcp add --transport http ihd \
+  https://integration-health-dashboard.fly.dev/mcp \
+  --header "Authorization: Bearer ihd_read_..."
+```
+
+Tools (each maps to the `/api/v1` endpoint of the same shape):
+
+| Tool | Does |
+| --- | --- |
+| `get_health` | Whole-org rollup + per-integration health. Start here. |
+| `list_integrations` | Every integration with its health status. |
+| `get_integration` | One integration's health + 20 recent events (`id`). |
+| `query_events` | Paginated, filterable events (`integration`, `status`, `resolution_status`, `since`, `search`, `sort_by`, `sort_order`, `limit`, `offset`). |
+| `get_event` | A single event by `id`. |
+| `list_monitors` | The org's saved monitors + last-24h activity. |
+| `get_monitor` | A monitor's config + the events its spec matches (`id`, paginated). |
+| `get_monitor_series` | A monitor's matching-event time series (`id`, `window`, `bucket`). |
+
+Because Claude.ai / Claude Desktop one-click connectors don't accept a
+user-pasted bearer token, this Phase-1 server targets **Claude Code** (`--header`),
+the **MCP Inspector**, and other header-capable hosts. Browser-based **OAuth
+sign-in for the one-click connectors is the planned Phase 4** — the auth check
+lives behind a single swappable boundary (`mcp/auth.ts`) so the tools and
+transport don't change when it lands.
+
 ## Why AI (and why not everywhere)
 
 | Layer | Technology | Why |
