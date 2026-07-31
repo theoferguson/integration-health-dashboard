@@ -81,14 +81,26 @@ export interface IdentityInput {
   avatarUrl?: string | null;
 }
 
-/** A user carrying this (verified-origin) email, if any - the link target. */
+/** Lowercased + trimmed email, or null - the canonical form we store and match. */
+function normalizeEmail(email: string | null | undefined): string | null {
+  const e = email?.trim().toLowerCase();
+  return e ? e : null;
+}
+
+/**
+ * The user carrying this email, if any - the account-linking target. Only
+ * VERIFIED emails are ever stored (see findOrCreateUserByIdentity), so every row
+ * this matches was verified by some provider. users.email is UNIQUE (partial
+ * index), so the primary lookup returns at most one; the identity fallback is
+ * ordered for determinism.
+ */
 function findUserIdByEmail(email: string): string | undefined {
-  const byUser = db.prepare('SELECT id FROM users WHERE email = ? LIMIT 1').get(email) as
+  const byUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as
     | { id: string }
     | undefined;
   if (byUser) return byUser.id;
   const byIdentity = db
-    .prepare('SELECT user_id FROM identities WHERE email = ? LIMIT 1')
+    .prepare('SELECT user_id FROM identities WHERE email = ? ORDER BY created_at ASC LIMIT 1')
     .get(email) as { user_id: string } | undefined;
   return byIdentity?.user_id;
 }
@@ -124,7 +136,12 @@ function refreshProfile(userId: string, input: IdentityInput): void {
  */
 export function findOrCreateUserByIdentity(input: IdentityInput): User {
   const { provider, providerUserId } = input;
-  const email = input.email ?? null;
+  // SECURITY: only a provider-VERIFIED email is ever persisted or used as a link
+  // key; an unverified assertion is dropped to null so it can NEVER become an
+  // account-linking target (pre-account-hijacking guard). Normalized so the same
+  // address matches case-insensitively across providers.
+  const email = input.emailVerified ? normalizeEmail(input.email) : null;
+  const profile: IdentityInput = { ...input, email };
   const now = Date.now();
 
   const existing = db
@@ -132,39 +149,47 @@ export function findOrCreateUserByIdentity(input: IdentityInput): User {
     .get(provider, providerUserId) as IdentityRow | undefined;
 
   if (existing) {
-    refreshProfile(existing.user_id, input);
-    if (email !== existing.email) {
+    refreshProfile(existing.user_id, profile);
+    // Only ever move the identity's email forward to a verified one; never null
+    // out a previously-verified email with an unverified sign-in.
+    if (email && email !== existing.email) {
       db.prepare('UPDATE identities SET email = ? WHERE id = ?').run(email, existing.id);
     }
     return getUserById(existing.user_id)!;
   }
 
-  // No identity yet. Link to an existing user only on a provider-verified email.
-  let userId = email && input.emailVerified ? findUserIdByEmail(email) : undefined;
+  const linkTargetId = email ? findUserIdByEmail(email) : undefined;
 
-  if (userId) {
-    refreshProfile(userId, input); // linking - fill gaps, don't clobber
-  } else {
-    userId = randomUUID();
+  // Create-or-link + the identity insert run in ONE transaction: two API
+  // processes sharing the WAL can't both pass the identity check above and then
+  // both write - the loser hits UNIQUE(provider, provider_user_id) and the whole
+  // unit rolls back, so no half-written user row is stranded.
+  const create = db.transaction((): string => {
+    let userId = linkTargetId;
+    if (userId) {
+      refreshProfile(userId, profile); // linking - fill gaps, don't clobber
+    } else {
+      userId = randomUUID();
+      db.prepare(
+        `INSERT INTO users (id, email, name, avatar_url, github_login, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(
+        userId,
+        email,
+        input.name ?? null,
+        input.avatarUrl ?? null,
+        provider === 'github' ? providerUserId : null,
+        now
+      );
+    }
     db.prepare(
-      `INSERT INTO users (id, email, name, avatar_url, github_login, created_at)
+      `INSERT INTO identities (id, user_id, provider, provider_user_id, email, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      userId,
-      email,
-      input.name ?? null,
-      input.avatarUrl ?? null,
-      provider === 'github' ? providerUserId : null,
-      now
-    );
-  }
+    ).run(randomUUID(), userId, provider, providerUserId, email, now);
+    return userId;
+  });
 
-  db.prepare(
-    `INSERT INTO identities (id, user_id, provider, provider_user_id, email, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(randomUUID(), userId, provider, providerUserId, email, now);
-
-  return getUserById(userId)!;
+  return getUserById(create())!;
 }
 
 /**

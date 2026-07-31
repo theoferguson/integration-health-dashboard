@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../app.js';
 import { createSessionToken } from '../../services/authToken.js';
-import { findOrCreateUser, displayName } from '../../services/userStore.js';
+import { findOrCreateUser } from '../../services/userStore.js';
 import { getMembershipForUser } from '../../services/orgStore.js';
 
 const app = createApp();
@@ -102,7 +102,7 @@ describe('GET /api/auth/me', () => {
 
   it('should report loggedIn: true with a valid session cookie', async () => {
     const user = findOrCreateUser('sessionuser');
-    const token = createSessionToken(user.id, displayName(user));
+    const token = createSessionToken(user.id);
 
     const response = await request(app).get('/api/auth/me').set('Cookie', `ihd_session=${token}`);
 

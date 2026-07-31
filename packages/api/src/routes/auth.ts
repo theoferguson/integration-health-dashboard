@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { createSessionToken } from '../services/authToken.js';
-import { findOrCreateUserByIdentity, displayName } from '../services/userStore.js';
+import { findOrCreateUserByIdentity, displayName, getUserById } from '../services/userStore.js';
 import { getMembershipForUser, createOrgForUser } from '../services/orgStore.js';
 import { getSession } from '../middleware/auth.js';
 
@@ -131,7 +131,7 @@ router.get('/callback', async (req, res) => {
     if (!getMembershipForUser(user.id)) {
       createOrgForUser(user.id, `${displayName(user)}'s org`);
     }
-    res.cookie(SESSION_COOKIE, createSessionToken(user.id, displayName(user)), {
+    res.cookie(SESSION_COOKIE, createSessionToken(user.id), {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
@@ -152,10 +152,10 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', (req, res) => {
   const session = getSession(req);
-  res.json({
-    loggedIn: session !== null,
-    login: session?.login ?? null,
-  });
+  // Look the user up fresh (the token no longer carries a display field), so the
+  // response reflects the current profile and nothing personal lives in the cookie.
+  const user = session ? getUserById(session.userId) : null;
+  res.json({ loggedIn: user !== null, login: user ? displayName(user) : null });
 });
 
 export default router;

@@ -92,6 +92,44 @@ describe('userStore', () => {
       const b = findOrCreateUserByIdentity({ provider: 'google', providerUserId: `goog-${uniq()}` });
       expect(a.id).not.toBe(b.id);
     });
+
+    it('an UNVERIFIED email cannot be pre-seeded to hijack a later verified sign-in', () => {
+      // Attacker signs in FIRST asserting the victim's address, unverified.
+      const victimEmail = `${uniq()}@corp.com`;
+      const attacker = findOrCreateUserByIdentity({
+        provider: 'google',
+        providerUserId: `attacker-${uniq()}`,
+        email: victimEmail,
+        emailVerified: false,
+      });
+      // The unverified address must NOT have been stored (so it can't be a target).
+      expect(getUserById(attacker.id)?.email).toBeNull();
+      // Victim later signs in via GitHub with the genuinely-verified same address.
+      const victim = findOrCreateUserByIdentity({
+        provider: 'github',
+        providerUserId: `victim-${uniq()}`,
+        email: victimEmail,
+        emailVerified: true,
+      });
+      expect(victim.id).not.toBe(attacker.id); // no takeover - separate accounts
+    });
+
+    it('links case-insensitively (normalized email)', () => {
+      const local = uniq();
+      const gh = findOrCreateUserByIdentity({
+        provider: 'github',
+        providerUserId: `gh-${uniq()}`,
+        email: `Mixed.${local}@Example.COM`,
+        emailVerified: true,
+      });
+      const google = findOrCreateUserByIdentity({
+        provider: 'google',
+        providerUserId: `goog-${uniq()}`,
+        email: `mixed.${local}@example.com`,
+        emailVerified: true,
+      });
+      expect(google.id).toBe(gh.id);
+    });
   });
 
   describe('getUserById', () => {

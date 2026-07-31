@@ -34,8 +34,10 @@ db.exec(`
   -- Federated identities: one row per (provider, provider account) linked to a
   -- user. A user can have several (GitHub + Google + email, ...), which is how
   -- one person signs in via multiple providers and lands on the same account.
-  -- provider_user_id is the provider's stable id (for legacy GitHub rows it's the
-  -- github_login we historically stored). See services/userStore.
+  -- provider_user_id is the provider's account id. For GitHub we use the login
+  -- (what we've always stored); note GitHub logins are renameable, so a rename
+  -- looks like a new identity and re-links via the verified email. See
+  -- services/userStore.
   CREATE TABLE IF NOT EXISTS identities (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
@@ -157,6 +159,10 @@ for (const col of ['email', 'name', 'avatar_url']) {
     db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
   }
 }
+// Enforce one account per verified email (the account-linking key). Partial so
+// the many null emails stay allowed. Created AFTER the ALTER above so the column
+// exists on upgraded prod DBs. Safe on existing data: legacy users have email=NULL.
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
 
 // Backfill a 'github' identity for every existing user (keyed on the github_login
 // we already stored), so the new identities table has a row for each legacy
@@ -178,17 +184,20 @@ for (const u of usersNeedingIdentity) {
 // org (as admin), and any of their pre-org projects get attached to it.
 const usersWithoutOrg = db
   .prepare(
-    `SELECT id, github_login FROM users
+    `SELECT id, github_login, name, email FROM users
      WHERE id NOT IN (SELECT user_id FROM org_memberships)`
   )
-  .all() as { id: string; github_login: string }[];
+  .all() as { id: string; github_login: string | null; name: string | null; email: string | null }[];
 
 for (const user of usersWithoutOrg) {
   const orgId = randomUUID();
   const now = Date.now();
+  // github_login is nullable now, so fall back through name/email to avoid a
+  // literal "null's org" for a non-GitHub account.
+  const label = user.name ?? user.email ?? user.github_login ?? 'My';
   db.prepare(
     'INSERT INTO orgs (id, name, invite_code, created_at) VALUES (?, ?, ?, ?)'
-  ).run(orgId, `${user.github_login}'s org`, randomBytes(6).toString('hex'), now);
+  ).run(orgId, `${label}'s org`, randomBytes(6).toString('hex'), now);
   db.prepare(
     'INSERT INTO org_memberships (user_id, org_id, role, created_at) VALUES (?, ?, ?, ?)'
   ).run(user.id, orgId, 'admin', now);
