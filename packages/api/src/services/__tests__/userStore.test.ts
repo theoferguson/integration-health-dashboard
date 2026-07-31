@@ -114,6 +114,22 @@ describe('userStore', () => {
       expect(victim.id).not.toBe(attacker.id); // no takeover - separate accounts
     });
 
+    it('creates a non-GitHub user with a NULL github_login (Phase 3 migration)', () => {
+      // The point of the github_login NOT NULL relaxation: a Google sign-in has
+      // no GitHub login, so the users row must accept github_login = NULL.
+      const u = findOrCreateUserByIdentity({
+        provider: 'google',
+        providerUserId: `goog-${uniq()}`,
+        email: `${uniq()}@example.com`,
+        emailVerified: true,
+        name: 'No GitHub Here',
+      });
+      expect(u.githubLogin).toBeNull();
+      // ...and it round-trips (the insert succeeded and the row is findable).
+      expect(getUserById(u.id)?.githubLogin).toBeNull();
+      expect(getUserById(u.id)?.name).toBe('No GitHub Here');
+    });
+
     it('links case-insensitively (normalized email)', () => {
       const local = uniq();
       const gh = findOrCreateUserByIdentity({

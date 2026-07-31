@@ -1,9 +1,15 @@
 import { Router } from 'express';
+import type { Request } from 'express';
 import { randomBytes } from 'crypto';
 import { createSessionToken } from '../services/authToken.js';
 import { findOrCreateUserByIdentity, displayName, getUserById } from '../services/userStore.js';
 import { getMembershipForUser, createOrgForUser } from '../services/orgStore.js';
 import { getSession } from '../middleware/auth.js';
+import {
+  oauthProviders,
+  exchangeCodeForToken,
+  type OAuthProviderId,
+} from '../services/oauthProviders.js';
 
 const router = Router();
 
@@ -12,36 +18,37 @@ const STATE_COOKIE = 'ihd_oauth_state';
 const isProd = process.env.NODE_ENV === 'production';
 const FRONTEND_DEV_URL = 'http://localhost:5173';
 
-function callbackUrl(req: import('express').Request): string {
-  return `${req.protocol}://${req.get('host')}/api/auth/callback`;
-}
-
 /**
- * GitHub's `/user/emails` -> the primary verified address (or null). Requires the
- * `user:email` scope. GitHub only lists a user's own emails and marks which is
- * primary/verified, so a returned address is safe to treat as verified.
+ * The redirect_uri for a given provider. It is now PER-PROVIDER
+ * (`/api/auth/callback/<provider>`), so each provider's OAuth app must register
+ * its own callback URL - the GitHub app's old `/api/auth/callback` must move to
+ * `/api/auth/callback/github`. See the README.
  */
-async function fetchGithubPrimaryEmail(accessToken: string): Promise<string | null> {
-  try {
-    const res = await fetch('https://api.github.com/user/emails', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'User-Agent': 'integration-health-dashboard',
-      },
-    });
-    if (!res.ok) return null;
-    const emails = (await res.json()) as { email: string; primary: boolean; verified: boolean }[];
-    const chosen = emails.find((e) => e.primary && e.verified) ?? emails.find((e) => e.verified);
-    return chosen?.email ?? null;
-  } catch {
-    return null;
-  }
+function callbackUrl(req: Request, provider: string): string {
+  return `${req.protocol}://${req.get('host')}/api/auth/callback/${provider}`;
 }
 
-router.get('/login', (req, res) => {
-  const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
-  if (!clientId) {
-    return res.status(500).send('GITHUB_OAUTH_CLIENT_ID is not configured');
+function lookupProvider(id: string) {
+  return (oauthProviders as Record<string, (typeof oauthProviders)[OAuthProviderId]>)[id];
+}
+
+// Back-compat: keep old `/api/auth/login` links working by sending them to the
+// GitHub flow (the only provider before Phase 3).
+router.get('/login', (_req, res) => {
+  res.redirect('/api/auth/login/github');
+});
+
+router.get('/login/:provider', (req, res) => {
+  const { provider } = req.params;
+  const config = lookupProvider(provider);
+  if (!config) {
+    return res.status(404).send(`Unknown auth provider: ${provider}`);
+  }
+
+  const clientId = process.env[config.clientIdEnv];
+  const clientSecret = process.env[config.clientSecretEnv];
+  if (!clientId || !clientSecret) {
+    return res.status(500).send(`${provider} OAuth is not configured`);
   }
 
   const state = randomBytes(16).toString('hex');
@@ -54,79 +61,65 @@ router.get('/login', (req, res) => {
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: callbackUrl(req),
-    // user:email lets us read the primary VERIFIED email, which becomes the
-    // cross-provider account-linking key (Phase 2).
-    scope: 'read:user user:email',
+    redirect_uri: callbackUrl(req, provider),
+    scope: config.scope,
     state,
+    ...config.authorizeParams,
   });
 
-  res.redirect(`https://github.com/login/oauth/authorize?${params}`);
+  res.redirect(`${config.authorizeUrl}?${params}`);
 });
 
-router.get('/callback', async (req, res) => {
+router.get('/callback/:provider', async (req, res) => {
+  const { provider } = req.params;
+  const config = lookupProvider(provider);
+
+  const redirectHome = () => res.redirect(isProd ? '/' : FRONTEND_DEV_URL);
+
+  if (!config) {
+    return res.status(404).send(`Unknown auth provider: ${provider}`);
+  }
+
   const { code, state } = req.query;
   const expectedState = req.cookies?.[STATE_COOKIE];
   res.clearCookie(STATE_COOKIE);
-
-  const redirectHome = () => res.redirect(isProd ? '/' : FRONTEND_DEV_URL);
 
   if (!code || typeof code !== 'string' || !state || state !== expectedState) {
     return redirectHome();
   }
 
-  const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
-  const clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+  const clientId = process.env[config.clientIdEnv];
+  const clientSecret = process.env[config.clientSecretEnv];
   if (!clientId || !clientSecret) {
-    return res.status(500).send('GitHub OAuth is not fully configured');
+    return res.status(500).send(`${provider} OAuth is not fully configured`);
   }
 
   try {
-    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        code,
-        redirect_uri: callbackUrl(req),
-      }),
+    const accessToken = await exchangeCodeForToken(config, {
+      code,
+      clientId,
+      clientSecret,
+      redirectUri: callbackUrl(req, provider),
     });
-    const tokenData = (await tokenResponse.json()) as { access_token?: string };
-    if (!tokenData.access_token) {
+    if (!accessToken) {
       return redirectHome();
     }
 
-    const userResponse = await fetch('https://api.github.com/user', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-        'User-Agent': 'integration-health-dashboard',
-      },
-    });
-    const ghUser = (await userResponse.json()) as {
-      login?: string;
-      name?: string | null;
-      avatar_url?: string | null;
-    };
-
-    if (!ghUser.login) {
+    const profile = await config.fetchProfile(accessToken);
+    if (!profile.providerUserId) {
       return redirectHome();
     }
 
-    // Primary verified email (needs the user:email scope) - the account-linking
-    // key so the same person via another provider later lands on this account.
-    // null if GitHub won't share a verified address.
-    const email = await fetchGithubPrimaryEmail(tokenData.access_token);
-
-    // Open signup: any successful GitHub login gets an account. This is a generic
-    // platform any project can report into, not a single-admin tool.
+    // Open signup: any successful provider login gets an account. The registry's
+    // fetchProfile normalized the provider's response, so this call is identical
+    // for every provider - the verified email (if any) is the account-linking key.
     const user = findOrCreateUserByIdentity({
-      provider: 'github',
-      providerUserId: ghUser.login,
-      email,
-      emailVerified: email !== null, // this endpoint only yields verified primaries
-      name: ghUser.name ?? null,
-      avatarUrl: ghUser.avatar_url ?? null,
+      provider: provider as OAuthProviderId,
+      providerUserId: profile.providerUserId,
+      email: profile.email,
+      emailVerified: profile.emailVerified,
+      name: profile.name,
+      avatarUrl: profile.avatarUrl,
     });
     if (!getMembershipForUser(user.id)) {
       createOrgForUser(user.id, `${displayName(user)}'s org`);
