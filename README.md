@@ -24,8 +24,8 @@ and lets teams graph and triage what matters.
 - **AI error triage.** Click any failure for an AI-generated category, severity,
   root cause, and suggested fix; then acknowledge / resolve / reopen. Falls back
   to a deterministic mock classifier when no OpenAI key is set.
-- **Multi-tenant.** GitHub-OAuth sign-in with open signup; each user gets an org,
-  projects are org-scoped, members read and admins manage.
+- **Multi-tenant.** Social sign-in (GitHub / Google / Facebook) with open signup;
+  each user gets an org, projects are org-scoped, members read and admins manage.
 
 A companion repo, **`integrations-host-app`**, is a real reporter that exercises
 this end to end (weather, NYT, NYC campaign-finance adapters emitting live events).
@@ -287,27 +287,50 @@ companion `integrations-host-app` at your local IHD.
 
 ## Accounts & projects
 
-Sign-in is GitHub OAuth with **open signup** — anyone with a GitHub account can
-sign in and create projects. Each project is an API key scoped to the creator's
-org; the Projects tab lists (and deletes) only your own. Any project with a key
-can report in via `POST /api/ingest`.
+Sign-in is social OAuth (GitHub / Google / Facebook) with **open signup** —
+anyone can sign in and create projects, and signing in via several providers with
+the same provider-verified email lands on one account. Each project is an API key
+scoped to the creator's org; the Projects tab lists (and deletes) only your own.
+Any project with a key can report in via `POST /api/ingest`.
 
 The CLI script (`npm run create-project`) also works standalone for
 scripting/bootstrapping — it creates an *ownerless* project (fine for ingest,
 but it won't appear in anyone's Projects list, since it has no org).
 
-### Setting up the GitHub OAuth App
+### Setting up social sign-in
 
-One-time step on your own GitHub account:
+Sign-in supports **GitHub, Google, and Facebook** — configure any subset. Every
+provider funnels through the same account model (one person who signs in via
+several providers lands on one account, linked by a provider-verified email), and
+each provider's OAuth app must register a **provider-scoped callback URL**:
 
-1. [github.com/settings/developers](https://github.com/settings/developers) →
-   **OAuth Apps** → **New OAuth App**.
-2. Homepage URL: `http://localhost:5173` (dev) or your Fly app URL (prod).
-3. **Authorization callback URL**: `http://localhost:3001/api/auth/callback` (dev)
-   or `https://<your-app>.fly.dev/api/auth/callback` (prod). GitHub requires an
-   exact match — use separate dev/prod OAuth Apps.
-4. Fill in `.env`: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`,
-   `SESSION_SECRET` (see `.env.example`).
+```
+<host>/api/auth/callback/<provider>
+```
+
+e.g. `http://localhost:3001/api/auth/callback/github` (dev) or
+`https://<your-app>.fly.dev/api/auth/callback/google` (prod). Providers require an
+exact match — use separate dev/prod apps.
+
+- **GitHub** — [github.com/settings/developers](https://github.com/settings/developers)
+  → **OAuth Apps** → **New OAuth App**. Callback:
+  `<host>/api/auth/callback/github`. Fill `GITHUB_OAUTH_CLIENT_ID` /
+  `GITHUB_OAUTH_CLIENT_SECRET`.
+- **Google** — [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+  → **Create OAuth client ID** (Web application). Authorized redirect URI:
+  `<host>/api/auth/callback/google`. Fill `GOOGLE_OAUTH_CLIENT_ID` /
+  `GOOGLE_OAUTH_CLIENT_SECRET`.
+- **Facebook** — [developers.facebook.com/apps](https://developers.facebook.com/apps)
+  → add **Facebook Login** → Valid OAuth Redirect URI:
+  `<host>/api/auth/callback/facebook`. Fill `FACEBOOK_OAUTH_CLIENT_ID` /
+  `FACEBOOK_OAUTH_CLIENT_SECRET`.
+
+Also set `SESSION_SECRET` (signs the session cookie — see `.env.example`).
+
+> **Upgrading from the GitHub-only setup:** the callback moved from
+> `/api/auth/callback` to `/api/auth/callback/github`. Update your existing GitHub
+> OAuth App's Authorization callback URL, or GitHub sign-in will fail with a
+> redirect-uri mismatch.
 
 ## Deployment (Fly.io)
 
@@ -318,9 +341,12 @@ fly auth login
 fly apps create integration-health-dashboard
 fly volumes create ihd_data --size 1 -a integration-health-dashboard --region sjc
 
-# optional secrets
-fly secrets set OPENAI_API_KEY=... GITHUB_OAUTH_CLIENT_ID=... \
-  GITHUB_OAUTH_CLIENT_SECRET=... SESSION_SECRET=... -a integration-health-dashboard
+# optional secrets (configure any subset of sign-in providers)
+fly secrets set OPENAI_API_KEY=... SESSION_SECRET=... \
+  GITHUB_OAUTH_CLIENT_ID=... GITHUB_OAUTH_CLIENT_SECRET=... \
+  GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... \
+  FACEBOOK_OAUTH_CLIENT_ID=... FACEBOOK_OAUTH_CLIENT_SECRET=... \
+  -a integration-health-dashboard
 
 npm run build   # packages/web/dist must exist — the Dockerfile copies it
 fly deploy
@@ -340,8 +366,18 @@ The volume must exist before the first deploy (`fly deploy` won't create it from
 | `INGEST_RATE_LIMIT_PER_MIN` | Max ingest requests per project per minute | No (default 120) |
 | `READ_API_RATE_LIMIT_PER_MIN` | Max `/api/v1` read requests per token per minute | No (default 300) |
 | `PUBLIC_BASE_URL` | Canonical public origin for the discovery docs' self-links (e.g. `https://integration-health-dashboard.fly.dev`) | Recommended in prod (falls back to the request Host) |
-| `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App | Only for sign-in |
+| `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | GitHub OAuth App | Only for GitHub sign-in |
+| `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | Google OAuth 2.0 client | Only for Google sign-in |
+| `FACEBOOK_OAUTH_CLIENT_ID` / `_SECRET` | Facebook Login app | Only for Facebook sign-in |
 | `SESSION_SECRET` | Signs the session cookie | Only for sign-in (insecure dev default otherwise) |
+
+> **Per-provider callback URL.** Each provider's OAuth app must register the
+> redirect URL `<host>/api/auth/callback/<provider>` (e.g.
+> `.../api/auth/callback/github`, `.../api/auth/callback/google`,
+> `.../api/auth/callback/facebook`). The callback is now provider-scoped — the
+> GitHub app's earlier `/api/auth/callback` must be updated to
+> `/api/auth/callback/github`. Configure only the providers you want; others just
+> 500 on their login route until their env vars are set.
 
 ## About
 
