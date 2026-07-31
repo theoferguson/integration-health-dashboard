@@ -21,7 +21,7 @@ beforeEach(() => {
   const user = findOrCreateUser(`api-test-user-${orgSeq++}`);
   const org = createOrgForUser(user.id, `${user.githubLogin}'s org`);
   projectId = createProject('api-test-project', org.id).id;
-  cookie = `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  cookie = `ihd_session=${createSessionToken(user.id)}`;
 });
 
 /** createEvent scoped to this test's org project. */
@@ -468,7 +468,7 @@ describe('API Integration Tests', () => {
       )!.org;
       const viewer = findOrCreateUser(`viewer-${orgSeq}`);
       joinOrgByCode(viewer.id, org.inviteCode);
-      const viewerCookie = `ihd_session=${createSessionToken(viewer.id, viewer.githubLogin)}`;
+      const viewerCookie = `ihd_session=${createSessionToken(viewer.id)}`;
 
       const event = ev({ integration: 'weather', eventType: 'test', status: 'failure', payload: {} });
 

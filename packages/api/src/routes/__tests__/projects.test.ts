@@ -12,20 +12,20 @@ const app = createApp();
 function adminCookieFor(login: string): string {
   const user = findOrCreateUser(login);
   createOrgForUser(user.id, `${login}'s org`);
-  return `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  return `ihd_session=${createSessionToken(user.id)}`;
 }
 
 /** Creates a user with no org membership at all. */
 function orglessCookieFor(login: string): string {
   const user = findOrCreateUser(login);
-  return `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  return `ihd_session=${createSessionToken(user.id)}`;
 }
 
 /** Creates a user who joins an existing org as a viewer via its invite code. */
 function viewerCookieFor(login: string, inviteCode: string): string {
   const user = findOrCreateUser(login);
   joinOrgByCode(user.id, inviteCode);
-  return `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+  return `ihd_session=${createSessionToken(user.id)}`;
 }
 
 function inviteCodeForAdmin(adminLogin: string): string {

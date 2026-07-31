@@ -18,11 +18,42 @@ export const db: Database.Database = new Database(resolveDbPath());
 db.pragma('journal_mode = WAL');
 
 db.exec(`
+  -- A user is provider-agnostic (Phase 2): identified by its linked identities,
+  -- not by a GitHub login. github_login is nullable (a Google/email user has
+  -- none) but still UNIQUE and still written for GitHub sign-ins. (email/name/
+  -- avatar_url are added by the migration below for tables that predate them.)
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    github_login TEXT UNIQUE NOT NULL,
+    github_login TEXT UNIQUE,
+    email TEXT,
+    name TEXT,
+    avatar_url TEXT,
     created_at INTEGER NOT NULL
   );
+
+  -- Federated identities: one row per (provider, provider account) linked to a
+  -- user. A user can have several (GitHub + Google + email, ...), which is how
+  -- one person signs in via multiple providers and lands on the same account.
+  -- provider_user_id is the provider's account id. For GitHub we use the login
+  -- (what we've always stored); note GitHub logins are renameable, so a rename
+  -- looks like a new identity and re-links via the verified email. See
+  -- services/userStore.
+  -- TODO(rename-stability): key GitHub identities on the STABLE numeric ghUser.id
+  -- instead of the login. Deferred because legacy rows only stored the login;
+  -- doing it right needs a dual-key lookback (match id OR login, then migrate the
+  -- row to the id on next sign-in) so existing accounts aren't stranded.
+  CREATE TABLE IF NOT EXISTS identities (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    provider TEXT NOT NULL,
+    provider_user_id TEXT NOT NULL,
+    email TEXT,
+    created_at INTEGER NOT NULL,
+    UNIQUE (provider, provider_user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_identities_user ON identities(user_id);
+  CREATE INDEX IF NOT EXISTS idx_identities_email ON identities(email);
 
   CREATE TABLE IF NOT EXISTS orgs (
     id TEXT PRIMARY KEY,
@@ -123,21 +154,54 @@ for (const col of ['metrics', 'tags', 'environment', 'severity', 'source']) {
   }
 }
 
+// Identity generalization (Phase 2): a user is no longer defined by its GitHub
+// login. Add provider-agnostic profile columns (additive - github_login stays,
+// still written for GitHub sign-ins and used by the legacy org backfill below).
+const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+for (const col of ['email', 'name', 'avatar_url']) {
+  if (!userColumns.some((c) => c.name === col)) {
+    db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
+  }
+}
+// Enforce one account per verified email (the account-linking key). Partial so
+// the many null emails stay allowed. Created AFTER the ALTER above so the column
+// exists on upgraded prod DBs. Safe on existing data: legacy users have email=NULL.
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
+
+// Backfill a 'github' identity for every existing user (keyed on the github_login
+// we already stored), so the new identities table has a row for each legacy
+// account and nobody is stranded. Idempotent: only users with no identity yet.
+const usersNeedingIdentity = db
+  .prepare(
+    `SELECT id, github_login FROM users
+     WHERE github_login IS NOT NULL AND id NOT IN (SELECT user_id FROM identities)`
+  )
+  .all() as { id: string; github_login: string }[];
+for (const u of usersNeedingIdentity) {
+  db.prepare(
+    `INSERT OR IGNORE INTO identities (id, user_id, provider, provider_user_id, email, created_at)
+     VALUES (?, ?, 'github', ?, NULL, ?)`
+  ).run(randomUUID(), u.id, u.github_login, Date.now());
+}
+
 // Backfill: every user without an org membership gets an auto-created personal
 // org (as admin), and any of their pre-org projects get attached to it.
 const usersWithoutOrg = db
   .prepare(
-    `SELECT id, github_login FROM users
+    `SELECT id, github_login, name, email FROM users
      WHERE id NOT IN (SELECT user_id FROM org_memberships)`
   )
-  .all() as { id: string; github_login: string }[];
+  .all() as { id: string; github_login: string | null; name: string | null; email: string | null }[];
 
 for (const user of usersWithoutOrg) {
   const orgId = randomUUID();
   const now = Date.now();
+  // github_login is nullable now, so fall back through name/email to avoid a
+  // literal "null's org" for a non-GitHub account.
+  const label = user.name ?? user.email ?? user.github_login ?? 'My';
   db.prepare(
     'INSERT INTO orgs (id, name, invite_code, created_at) VALUES (?, ?, ?, ?)'
-  ).run(orgId, `${user.github_login}'s org`, randomBytes(6).toString('hex'), now);
+  ).run(orgId, `${label}'s org`, randomBytes(6).toString('hex'), now);
   db.prepare(
     'INSERT INTO org_memberships (user_id, org_id, role, created_at) VALUES (?, ?, ?, ?)'
   ).run(user.id, orgId, 'admin', now);

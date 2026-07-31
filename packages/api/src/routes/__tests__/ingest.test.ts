@@ -19,7 +19,7 @@ describe('POST /api/ingest', () => {
     const user = findOrCreateUser(`ingest-test-user-${seq++}`);
     const org = createOrgForUser(user.id, `${user.githubLogin}'s org`);
     project = createProject(`test-project-${Math.random()}`, org.id);
-    cookie = `ihd_session=${createSessionToken(user.id, user.githubLogin)}`;
+    cookie = `ihd_session=${createSessionToken(user.id)}`;
   });
 
   const validBody = {

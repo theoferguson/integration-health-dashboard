@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { createSessionToken } from '../services/authToken.js';
-import { findOrCreateUser } from '../services/userStore.js';
+import { findOrCreateUserByIdentity, displayName, getUserById } from '../services/userStore.js';
 import { getMembershipForUser, createOrgForUser } from '../services/orgStore.js';
 import { getSession } from '../middleware/auth.js';
 
@@ -14,6 +14,28 @@ const FRONTEND_DEV_URL = 'http://localhost:5173';
 
 function callbackUrl(req: import('express').Request): string {
   return `${req.protocol}://${req.get('host')}/api/auth/callback`;
+}
+
+/**
+ * GitHub's `/user/emails` -> the primary verified address (or null). Requires the
+ * `user:email` scope. GitHub only lists a user's own emails and marks which is
+ * primary/verified, so a returned address is safe to treat as verified.
+ */
+async function fetchGithubPrimaryEmail(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.github.com/user/emails', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'User-Agent': 'integration-health-dashboard',
+      },
+    });
+    if (!res.ok) return null;
+    const emails = (await res.json()) as { email: string; primary: boolean; verified: boolean }[];
+    const chosen = emails.find((e) => e.primary && e.verified) ?? emails.find((e) => e.verified);
+    return chosen?.email ?? null;
+  } catch {
+    return null;
+  }
 }
 
 router.get('/login', (req, res) => {
@@ -33,7 +55,9 @@ router.get('/login', (req, res) => {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: callbackUrl(req),
-    scope: 'read:user',
+    // user:email lets us read the primary VERIFIED email, which becomes the
+    // cross-provider account-linking key (Phase 2).
+    scope: 'read:user user:email',
     state,
   });
 
@@ -79,19 +103,35 @@ router.get('/callback', async (req, res) => {
         'User-Agent': 'integration-health-dashboard',
       },
     });
-    const ghUser = (await userResponse.json()) as { login?: string };
+    const ghUser = (await userResponse.json()) as {
+      login?: string;
+      name?: string | null;
+      avatar_url?: string | null;
+    };
 
     if (!ghUser.login) {
       return redirectHome();
     }
 
-    // Open signup: any successful GitHub login gets an account. This is a
-    // generic platform any project can report into, not a single-admin tool.
-    const user = findOrCreateUser(ghUser.login);
+    // Primary verified email (needs the user:email scope) - the account-linking
+    // key so the same person via another provider later lands on this account.
+    // null if GitHub won't share a verified address.
+    const email = await fetchGithubPrimaryEmail(tokenData.access_token);
+
+    // Open signup: any successful GitHub login gets an account. This is a generic
+    // platform any project can report into, not a single-admin tool.
+    const user = findOrCreateUserByIdentity({
+      provider: 'github',
+      providerUserId: ghUser.login,
+      email,
+      emailVerified: email !== null, // this endpoint only yields verified primaries
+      name: ghUser.name ?? null,
+      avatarUrl: ghUser.avatar_url ?? null,
+    });
     if (!getMembershipForUser(user.id)) {
-      createOrgForUser(user.id, `${user.githubLogin}'s org`);
+      createOrgForUser(user.id, `${displayName(user)}'s org`);
     }
-    res.cookie(SESSION_COOKIE, createSessionToken(user.id, user.githubLogin), {
+    res.cookie(SESSION_COOKIE, createSessionToken(user.id), {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
@@ -112,10 +152,10 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', (req, res) => {
   const session = getSession(req);
-  res.json({
-    loggedIn: session !== null,
-    login: session?.login ?? null,
-  });
+  // Look the user up fresh (the token no longer carries a display field), so the
+  // response reflects the current profile and nothing personal lives in the cookie.
+  const user = session ? getUserById(session.userId) : null;
+  res.json({ loggedIn: user !== null, login: user ? displayName(user) : null });
 });
 
 export default router;

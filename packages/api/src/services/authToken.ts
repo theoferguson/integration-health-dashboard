@@ -7,7 +7,6 @@ import { createHmac, timingSafeEqual } from 'crypto';
 
 export interface SessionPayload {
   userId: string;
-  login: string;
   exp: number;
 }
 
@@ -33,8 +32,11 @@ function sign(payload: string): string {
   return createHmac('sha256', SECRET).update(payload).digest('hex');
 }
 
-export function createSessionToken(userId: string, login: string): string {
-  const payload: SessionPayload = { userId, login, exp: Date.now() + SESSION_DURATION_MS };
+// The token carries only the user id (+ expiry) - no name/email, since it is
+// signed-but-not-encrypted and sent to the client. Display fields come from a
+// fresh user lookup (see /api/auth/me), so nothing personal sits in the cookie.
+export function createSessionToken(userId: string): string {
+  const payload: SessionPayload = { userId, exp: Date.now() + SESSION_DURATION_MS };
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${encoded}.${sign(encoded)}`;
 }

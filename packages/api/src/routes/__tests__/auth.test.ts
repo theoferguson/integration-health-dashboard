@@ -102,7 +102,7 @@ describe('GET /api/auth/me', () => {
 
   it('should report loggedIn: true with a valid session cookie', async () => {
     const user = findOrCreateUser('sessionuser');
-    const token = createSessionToken(user.id, user.githubLogin);
+    const token = createSessionToken(user.id);
 
     const response = await request(app).get('/api/auth/me').set('Cookie', `ihd_session=${token}`);
 
