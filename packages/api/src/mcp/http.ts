@@ -14,32 +14,18 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { resolveMcpAuth } from './auth.js';
 import { buildMcpServer } from './server.js';
 
-/**
- * Hosts allowed in the Origin header, computed once (PUBLIC_BASE_URL is fixed for
- * the process lifetime): the public origin's hostname (never a client-supplied
- * Host) plus loopback for local dev and the Inspector. Compared against the
- * request Origin's HOSTNAME (not host) so a loopback client on any port matches.
- */
-let allowedHostsCache: Set<string> | null = null;
-function allowedOriginHosts(): Set<string> {
-  if (allowedHostsCache) return allowedHostsCache;
-  const hosts = new Set<string>(['localhost', '127.0.0.1', '[::1]']);
-  const configured = process.env.PUBLIC_BASE_URL?.trim();
-  if (configured) {
-    try {
-      hosts.add(new URL(configured).hostname);
-    } catch {
-      // Malformed PUBLIC_BASE_URL - fall through with just loopback allowed.
-    }
-  }
-  allowedHostsCache = hosts;
-  return hosts;
-}
+// Loopback hosts always allowed (local dev + the MCP Inspector, on any port).
+const LOOPBACK_HOSTS = new Set<string>(['localhost', '127.0.0.1', '[::1]']);
 
 /**
- * True if the Origin header (when present) names an allowed host. A missing
- * Origin (non-browser clients: Claude Code, curl, the Inspector CLI) is allowed -
- * DNS rebinding is a browser-only threat, so there is nothing to defend against.
+ * True if the Origin header (when present) names an allowed host: loopback, or
+ * the configured public origin. PUBLIC_BASE_URL is read fresh (a cheap parse,
+ * only when the origin isn't loopback) rather than cached, so there's no
+ * first-request-freeze or test-ordering hazard. Compared against the Origin's
+ * HOSTNAME (not host) so a loopback client on any port matches.
+ *
+ * A missing Origin (non-browser clients: Claude Code, curl, the Inspector CLI)
+ * is allowed - DNS rebinding is a browser-only threat, nothing to defend against.
  */
 function originAllowed(req: Request): boolean {
   const origin = req.header('origin');
@@ -50,7 +36,15 @@ function originAllowed(req: Request): boolean {
   } catch {
     return false; // Unparseable Origin - reject.
   }
-  return allowedOriginHosts().has(hostname);
+  if (LOOPBACK_HOSTS.has(hostname)) return true;
+
+  const configured = process.env.PUBLIC_BASE_URL?.trim();
+  if (!configured) return false;
+  try {
+    return new URL(configured).hostname === hostname;
+  } catch {
+    return false; // Malformed PUBLIC_BASE_URL - only loopback is allowed.
+  }
 }
 
 /**
@@ -115,12 +109,16 @@ export async function handleMcpPost(req: Request, res: Response): Promise<void> 
   // Guard the whole transport dance: this is an async Express handler and
   // Express 4 does NOT catch rejected promises, so an unhandled throw would leave
   // the socket hanging. Reply 500 { error } if nothing has been sent yet.
+  let closed = false;
   try {
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     const server = buildMcpServer(ctx);
     // Release both per-request objects when the socket closes (the SDK's
     // canonical stateless pattern tears down server and transport together).
+    // The `closed` flag lets the catch below avoid writing to a socket the
+    // client already aborted.
     res.on('close', () => {
+      closed = true;
       void transport.close();
       void server.close();
     });
@@ -129,7 +127,7 @@ export async function handleMcpPost(req: Request, res: Response): Promise<void> 
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
     console.error('[mcp] request failed:', err);
-    if (!res.headersSent) {
+    if (!closed && !res.headersSent) {
       res.status(500).json({ error: { code: 'internal', message: 'Internal error' } });
     }
   }

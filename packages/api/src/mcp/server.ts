@@ -95,12 +95,14 @@ const PAGINATION_SHAPE = {
   since: z.string().optional().describe('ISO 8601 timestamp; events at or after it.'),
   sort_by: enumOf(SORT_FIELDS).optional().describe('Sort field. Default timestamp.'),
   sort_order: enumOf(SORT_ORDERS).optional().describe('Sort direction. Default desc.'),
-  limit: z
+  // Coerce (not bare z.number) so an agent that sends a stringified or fractional
+  // number gets it clamped by clampInt - matching the /api/v1 door - instead of a
+  // hard zod rejection. The JSON schema still advertises `number`.
+  limit: z.coerce
     .number()
-    .int()
     .optional()
     .describe(`1-${MAX_LIMIT}, default ${DEFAULT_LIMIT}. Out-of-range values are clamped.`),
-  offset: z.number().int().optional().describe('Rows to skip. Default 0.'),
+  offset: z.coerce.number().optional().describe('Rows to skip. Default 0.'),
 };
 
 interface PageOpts {
@@ -299,11 +301,11 @@ export function buildMcpServer(ctx: McpAuthContext): McpServer {
       description: "A monitor's matching-event time series, bucketed. Errors not_found on an unknown id.",
       inputSchema: {
         id: z.string().describe('The monitor id.'),
-        window: z
+        window: z.coerce
           .number()
           .optional()
           .describe('Lookback in ms. Minimum 1 hour, default 7 days.'),
-        bucket: z
+        bucket: z.coerce
           .number()
           .optional()
           .describe('Bucket width in ms. Minimum 1 minute, default 1 hour; widened past 500 buckets.'),

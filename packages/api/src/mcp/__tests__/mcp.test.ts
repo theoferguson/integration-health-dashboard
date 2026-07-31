@@ -241,6 +241,20 @@ describe('MCP server (read-token)', () => {
       await clientB.close();
     });
 
+    it('coerces a stringified/fractional limit and clamps it (parity with /api/v1)', async () => {
+      const client = await connect(secretA);
+      // LLM agents often emit numbers as JSON strings; a bad enum hard-errors but
+      // a numeric field must coerce+clamp, not reject.
+      const strLimit = parse(await client.callTool({ name: 'query_events', arguments: { limit: '9999' } }));
+      expect(strLimit.isError).toBe(false);
+      expect(strLimit.data.limit).toBe(100); // clamped to MAX_LIMIT
+
+      const frac = parse(await client.callTool({ name: 'query_events', arguments: { limit: 5.9 } }));
+      expect(frac.isError).toBe(false);
+      expect(frac.data.limit).toBe(5); // floored by clampInt
+      await client.close();
+    });
+
     it('get_integration errors not_found for an unreported id', async () => {
       const client = await connect(secretA);
       const { isError, data } = parse(
