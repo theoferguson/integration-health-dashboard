@@ -11,8 +11,10 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { resolveMcpAuth } from './auth.js';
 import { buildMcpServer } from './server.js';
+import { resolveBaseUrl } from '../services/baseUrl.js';
 
 // Loopback hosts always allowed (local dev + the MCP Inspector, on any port).
 const LOOPBACK_HOSTS = new Set<string>(['localhost', '127.0.0.1', '[::1]']);
@@ -67,11 +69,10 @@ export function mcpOriginGuard(req: Request, res: Response, next: NextFunction):
  * emit a structured 500 rather than leak a stack or hang the socket. On success
  * it stashes org + token id on res.locals for the per-token limiter and handler.
  *
- * NOTE (Phase 1 scope): Claude.ai / Claude Desktop one-click connectors do not
- * accept a user-pasted bearer token, so this read-token server targets Claude
- * Code (`claude mcp add --transport http ... --header "Authorization: Bearer ..."`),
- * the MCP Inspector, and other header-capable hosts. Phase 4 adds OAuth so the
- * one-click connectors can sign in via the browser.
+ * Since Phase 4 both a browser-OAuth access token and the original read token are
+ * accepted (see mcp/auth.ts), so Claude.ai / Claude Desktop can connect with a
+ * sign-in while existing `claude mcp add --header "Authorization: Bearer ..."`
+ * setups keep working unchanged.
  */
 export function requireMcpAuth(req: Request, res: Response, next: NextFunction): void {
   let result: ReturnType<typeof resolveMcpAuth>;
@@ -84,9 +85,17 @@ export function requireMcpAuth(req: Request, res: Response, next: NextFunction):
   }
 
   if (!result.ok) {
+    // RFC 9728: the challenge MUST point at this resource's metadata, which is
+    // how an MCP client discovers WHICH authorization server to use. Without the
+    // resource_metadata parameter a one-click connector has nothing to go on and
+    // can't start the OAuth flow at all - a bare `Bearer` challenge only works
+    // for clients that were handed a token out of band.
+    const metadataUrl = getOAuthProtectedResourceMetadataUrl(
+      new URL('/mcp', resolveBaseUrl(req))
+    );
     res
       .status(401)
-      .set('WWW-Authenticate', 'Bearer')
+      .set('WWW-Authenticate', `Bearer resource_metadata="${metadataUrl}"`)
       .json({ error: { code: result.code, message: result.message } });
     return;
   }

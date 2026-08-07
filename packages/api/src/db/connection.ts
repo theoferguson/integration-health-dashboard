@@ -137,6 +137,75 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_read_tokens_org ON read_tokens(org_id);
+
+  -- ---- OAuth authorization server (ROADMAP #11, Phase 4) -------------------
+  -- Lets Claude.ai / Claude Desktop connect via browser sign-in instead of a
+  -- pasted read token. See services/oauthStore.ts and mcp/oauthProvider.ts.
+
+  -- Clients registered via RFC 7591 dynamic client registration. Deliberately
+  -- NO client_secret column: every client is registered PUBLIC
+  -- (token_endpoint_auth_method 'none') and authenticated by PKCE instead. The
+  -- MCP SDK compares client secrets in PLAINTEXT (authenticateClient in
+  -- server/auth/middleware/clientAuth.js), so storing one would mean keeping a
+  -- usable credential at rest. Public + PKCE is also what OAuth 2.1 recommends
+  -- for clients that can't keep a secret, which is exactly what these are.
+  CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id TEXT PRIMARY KEY,
+    client_name TEXT,
+    redirect_uris TEXT NOT NULL,
+    grant_types TEXT NOT NULL,
+    response_types TEXT NOT NULL,
+    scope TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  -- An /authorize request parked while the user signs in and consents. Holds no
+  -- user identity - that's only known once consent is submitted with a session.
+  CREATE TABLE IF NOT EXISTS oauth_pending (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    state TEXT,
+    scope TEXT,
+    resource TEXT,
+    expires_at INTEGER NOT NULL
+  );
+
+  -- Issued authorization codes. Single-use: consumed_at is stamped on exchange,
+  -- and a second exchange of the same code is refused (OAuth 2.1 requires it).
+  -- Only the hash is stored, like read tokens.
+  CREATE TABLE IF NOT EXISTS oauth_codes (
+    code_hash TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    org_id TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    scope TEXT,
+    resource TEXT,
+    expires_at INTEGER NOT NULL,
+    consumed_at INTEGER
+  );
+
+  -- Access + refresh tokens, hashed. The resource column is the RFC 8707
+  -- audience: a token minted for this MCP server must not be replayable elsewhere.
+  CREATE TABLE IF NOT EXISTS oauth_tokens (
+    token_hash TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('access', 'refresh')),
+    client_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    org_id TEXT NOT NULL,
+    scope TEXT,
+    resource TEXT,
+    expires_at INTEGER,
+    revoked_at INTEGER,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens(user_id);
+  CREATE INDEX IF NOT EXISTS idx_oauth_codes_expiry ON oauth_codes(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_oauth_pending_expiry ON oauth_pending(expires_at);
 `);
 
 // CREATE TABLE IF NOT EXISTS is a no-op against a projects table that predates
