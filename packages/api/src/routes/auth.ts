@@ -1,10 +1,24 @@
 import { Router } from 'express';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { randomBytes } from 'crypto';
 import { createSessionToken } from '../services/authToken.js';
-import { findOrCreateUserByIdentity, displayName, getUserById } from '../services/userStore.js';
+import {
+  findOrCreateUserByIdentity,
+  displayName,
+  getUserById,
+  getPasswordIdentity,
+  normalizeEmail,
+  type User,
+} from '../services/userStore.js';
 import { getMembershipForUser, createOrgForUser } from '../services/orgStore.js';
 import { getSession } from '../middleware/auth.js';
+import { authRateLimiter } from '../middleware/rateLimit.js';
+import {
+  hashPassword,
+  verifyPassword,
+  MIN_PASSWORD_LENGTH,
+  DUMMY_PASSWORD_HASH,
+} from '../services/passwordAuth.js';
 import {
   oauthProviders,
   exchangeCodeForToken,
@@ -30,6 +44,24 @@ function callbackUrl(req: Request, provider: string): string {
 
 function lookupProvider(id: string) {
   return (oauthProviders as Record<string, (typeof oauthProviders)[OAuthProviderId]>)[id];
+}
+
+/**
+ * Everything a successful sign-in does regardless of provider: make sure the
+ * user has an org (first sign-in bootstraps one) and set the session cookie.
+ * Shared by the OAuth callback and the password routes so the two paths can't
+ * drift on cookie flags or the org bootstrap.
+ */
+function startSession(res: Response, user: User): void {
+  if (!getMembershipForUser(user.id)) {
+    createOrgForUser(user.id, `${displayName(user)}'s org`);
+  }
+  res.cookie(SESSION_COOKIE, createSessionToken(user.id), {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
 }
 
 // Back-compat: keep old `/api/auth/login` links working by sending them to the
@@ -121,21 +153,109 @@ router.get('/callback/:provider', async (req, res) => {
       name: profile.name,
       avatarUrl: profile.avatarUrl,
     });
-    if (!getMembershipForUser(user.id)) {
-      createOrgForUser(user.id, `${displayName(user)}'s org`);
-    }
-    res.cookie(SESSION_COOKIE, createSessionToken(user.id), {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
+    startSession(res, user);
     return redirectHome();
   } catch (err) {
     console.error('[auth] callback error:', err);
     return redirectHome();
   }
+});
+
+// --- Email + password ---------------------------------------------------
+// A local account is just another identity (provider='password'), so it reuses
+// findOrCreateUserByIdentity and startSession like every OAuth provider. There
+// is no mailer yet (ROADMAP #11), which has two deliberate consequences:
+//   - NO email verification: emailVerified is false, so userStore never stores
+//     the address as an account-linking key. A password account is therefore
+//     always isolated - claiming someone else's address gains nothing.
+//   - NO password reset. Forgetting the password means using an OAuth provider
+//     instead. Add the reset flow when a mailer lands.
+
+/** Reject anything that isn't a plausible address before it reaches the store. */
+function isValidEmail(email: string): boolean {
+  // Deliberately loose - the only real check on an address is sending to it,
+  // which we can't do. This just rejects obvious junk and control characters.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+
+interface Credentials {
+  email: string;
+  password: string;
+}
+
+/** Pull + validate credentials from a request body. Returns an error string, or the pair. */
+function readCredentials(body: unknown): { error: string } | Credentials {
+  const { email, password } = (body ?? {}) as Record<string, unknown>;
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    return { error: 'Email and password are required' };
+  }
+  const normalized = normalizeEmail(email);
+  if (!normalized || !isValidEmail(normalized)) {
+    return { error: 'Enter a valid email address' };
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
+  return { email: normalized, password };
+}
+
+router.post('/signup', authRateLimiter, async (req, res) => {
+  const creds = readCredentials(req.body);
+  if ('error' in creds) {
+    return res.status(400).json({ error: creds.error });
+  }
+
+  if (getPasswordIdentity(creds.email)) {
+    return res.status(409).json({ error: 'An account with that email already exists' });
+  }
+
+  try {
+    const user = findOrCreateUserByIdentity({
+      provider: 'password',
+      providerUserId: creds.email,
+      // NOT promoted to a linkable users.email (emailVerified stays false - we
+      // have no way to confirm the address), so userStore drops it. It survives
+      // as provider_user_id, which is what login looks up.
+      email: creds.email,
+      emailVerified: false,
+      // Display only. users.email stays null for an unverified account, so
+      // without this every password user would render as the generic "user"
+      // fallback. `name` is never a lookup or linking key (findUserIdByEmail
+      // reads users.email / identities.email only), so this is safe to set from
+      // an unverified address.
+      name: creds.email,
+      passwordHash: await hashPassword(creds.password),
+    });
+    startSession(res, user);
+    return res.status(201).json({ ok: true, login: displayName(user) });
+  } catch (err) {
+    // The UNIQUE(provider, provider_user_id) constraint is the real race guard -
+    // two concurrent signups for one address leave exactly one winner.
+    console.error('[auth] signup error:', err);
+    return res.status(409).json({ error: 'An account with that email already exists' });
+  }
+});
+
+router.post('/login', authRateLimiter, async (req, res) => {
+  const creds = readCredentials(req.body);
+  if ('error' in creds) {
+    return res.status(400).json({ error: creds.error });
+  }
+
+  const identity = getPasswordIdentity(creds.email);
+  // One message and one code for "no such account" and "wrong password", so the
+  // endpoint isn't an account-existence oracle. Unknown addresses still pay the
+  // scrypt cost (against a hash nothing matches) so timing doesn't leak it either.
+  const invalid = () => res.status(401).json({ error: 'Incorrect email or password' });
+
+  const ok = await verifyPassword(creds.password, identity?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!ok || !identity) return invalid();
+
+  const user = getUserById(identity.userId);
+  if (!user) return invalid();
+
+  startSession(res, user);
+  return res.json({ ok: true, login: displayName(user) });
 });
 
 router.post('/logout', (req, res) => {
