@@ -220,6 +220,22 @@ export async function logout(): Promise<void> {
   await apiCall(`${API_BASE}/auth/logout`, { method: 'POST' });
 }
 
+/**
+ * Email+password signup / login. Both set the session cookie on success, so the
+ * caller just needs to reload once the promise resolves.
+ */
+export async function passwordAuthRequest(
+  mode: 'signup' | 'login',
+  email: string,
+  password: string
+): Promise<{ login: string }> {
+  return apiCall(`${API_BASE}/auth/${mode}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
 // ============ Project APIs ============
 
 export interface ProjectSummary {

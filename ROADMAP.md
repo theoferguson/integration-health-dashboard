@@ -80,6 +80,25 @@ The programmatic front door.
   boundary (`mcp/auth.ts`); **browser-OAuth for the one-click Claude.ai/Desktop
   connectors is a later slice (Phase 4)** that replaces only that boundary — the
   tools and transport wiring don't change.
+- [x] **Email + password sign-in** (Phase 3 Build 2) — a local account is just
+  another identity (`provider='password'`, `provider_user_id` = the normalized
+  email), so signup/login reuse `findOrCreateUserByIdentity` and the same session
+  cookie as every OAuth provider. Hashing is stdlib `crypto.scrypt` (no bcrypt/
+  argon2 dependency), stored as `scrypt$salt$key` on a new `identities.password_hash`
+  column. **Deliberately no mailer**: no email verification and no password reset,
+  which is what let this ship without a Resend/Brevo account or a verified sending
+  domain. Consequences, both intentional: a password account is never
+  email-verified, so it can never link to (or be linked from) an OAuth account —
+  claiming someone else's address gains an attacker nothing; and a forgotten
+  password means signing in via Google/GitHub/Facebook instead.
+  Hardening: a dedicated 10/min per-IP limiter (`AUTH_RATE_LIMIT_PER_MIN`) since
+  scrypt is slow enough to be a CPU DoS on a 256mb machine, identical
+  response for "no such account" and "wrong password", and unknown addresses
+  still pay the scrypt cost so timing isn't an account-existence oracle.
+- [ ] **Password reset + email verification** — blocked on a mailer. When one
+  lands (Gmail SMTP via an App Password is the free path; Resend needs a verified
+  domain), add the reset flow and promote a confirmed address to a linkable
+  `users.email` so password and OAuth accounts can merge.
 - [ ] **Read-token management UI** — today minting/revoking a token needs SSH or
   the raw admin API (surfaced during the prod smoke test); a real user needs a
   settings screen to create, list (name + prefix + `last_used_at`), and revoke

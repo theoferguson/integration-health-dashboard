@@ -79,12 +79,35 @@ export interface IdentityInput {
   emailVerified?: boolean;
   name?: string | null;
   avatarUrl?: string | null;
+  /**
+   * Only for provider='password': the scrypt digest to store on the new identity
+   * row. Ignored for OAuth providers (they have no local secret) and never
+   * written to an identity that already exists.
+   */
+  passwordHash?: string | null;
 }
 
 /** Lowercased + trimmed email, or null - the canonical form we store and match. */
-function normalizeEmail(email: string | null | undefined): string | null {
+export function normalizeEmail(email: string | null | undefined): string | null {
   const e = email?.trim().toLowerCase();
   return e ? e : null;
+}
+
+/**
+ * The password identity for an email, if one exists. `provider_user_id` for the
+ * password provider IS the normalized email, so this is the login lookup - it
+ * rides the existing UNIQUE(provider, provider_user_id) index. Also the
+ * duplicate-signup check.
+ */
+export function getPasswordIdentity(
+  email: string
+): { userId: string; passwordHash: string | null } | undefined {
+  const row = db
+    .prepare(
+      "SELECT user_id, password_hash FROM identities WHERE provider = 'password' AND provider_user_id = ?"
+    )
+    .get(normalizeEmail(email)) as { user_id: string; password_hash: string | null } | undefined;
+  return row ? { userId: row.user_id, passwordHash: row.password_hash } : undefined;
 }
 
 /**
@@ -183,9 +206,17 @@ export function findOrCreateUserByIdentity(input: IdentityInput): User {
       );
     }
     db.prepare(
-      `INSERT INTO identities (id, user_id, provider, provider_user_id, email, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(randomUUID(), userId, provider, providerUserId, email, now);
+      `INSERT INTO identities (id, user_id, provider, provider_user_id, email, password_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      randomUUID(),
+      userId,
+      provider,
+      providerUserId,
+      email,
+      provider === 'password' ? (input.passwordHash ?? null) : null,
+      now
+    );
     return userId;
   });
 

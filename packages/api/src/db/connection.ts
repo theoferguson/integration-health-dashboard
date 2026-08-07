@@ -42,12 +42,16 @@ db.exec(`
   -- instead of the login. Deferred because legacy rows only stored the login;
   -- doing it right needs a dual-key lookback (match id OR login, then migrate the
   -- row to the id on next sign-in) so existing accounts aren't stranded.
+  -- password_hash is set ONLY on provider='password' rows (null for every OAuth
+  -- provider): the scrypt digest for email+password sign-in. See
+  -- services/passwordAuth.ts.
   CREATE TABLE IF NOT EXISTS identities (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
     provider TEXT NOT NULL,
     provider_user_id TEXT NOT NULL,
     email TEXT,
+    password_hash TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE (provider, provider_user_id)
   );
@@ -165,6 +169,13 @@ for (const col of ['email', 'name', 'avatar_url']) {
   if (!userColumns.some((c) => c.name === col)) {
     db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
   }
+}
+
+// Email+password sign-in (Phase 3 Build 2): the identities table on deployments
+// that predate it has no password_hash, and CREATE IF NOT EXISTS won't add one.
+const identityColumns = db.prepare('PRAGMA table_info(identities)').all() as { name: string }[];
+if (!identityColumns.some((c) => c.name === 'password_hash')) {
+  db.exec('ALTER TABLE identities ADD COLUMN password_hash TEXT');
 }
 
 // Non-GitHub sign-in unblock (Phase 3): relax github_login NOT NULL on existing

@@ -47,6 +47,23 @@ export const ingestRateLimiter = makeLimiter({
   message: { error: 'Too many requests - slow down and retry after the window resets' },
 });
 
+// --- Password auth (/api/auth/signup, /api/auth/login) ------------------
+// An unauthenticated endpoint that checks a secret is a brute-force target, and
+// scrypt is deliberately slow, so an unbounded flood is also a CPU DoS on a
+// 256mb machine. Keyed per IP (there is no token yet, and keying on the SUBMITTED
+// email would let an attacker rotate addresses for a fresh budget each). Low
+// enough to make guessing pointless, high enough to survive a few typos and a
+// shared NAT.
+const AUTH_MAX = Number(process.env.AUTH_RATE_LIMIT_PER_MIN) || 10;
+
+export const authRateLimiter = makeLimiter({
+  limit: AUTH_MAX,
+  keyGenerator: ipKey,
+  message: {
+    error: { code: 'rate_limited', message: 'Too many attempts - try again in a minute' },
+  },
+});
+
 // --- Read API (/api/v1) -------------------------------------------------
 // Two layers, because a keyGenerator can't tell a real token from junk before
 // auth: a single token-keyed limiter would let an attacker rotate bearer values
