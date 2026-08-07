@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, MonitorsPanel } from './components';
+import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, ReadTokensPanel, MonitorsPanel } from './components';
 import { useHealthData, useAuth } from './hooks';
 import { passwordAuthRequest } from './api/client';
 import type { IntegrationEvent } from './types';
@@ -223,13 +223,18 @@ function App() {
           <MonitorsPanel loggedIn={auth?.loggedIn ?? false} isAdmin={role === 'admin'} />
         )}
 
+        {/* The Projects tab is where org credentials live (ingest keys, invite
+            code), so read tokens belong here too rather than in a fifth tab. */}
         {activeTab === 'projects' && (
-          <ProjectsPanel
-            loggedIn={auth?.loggedIn ?? false}
-            role={role}
-            org={org}
-            onOrgChange={handleOrgChange}
-          />
+          <div className="space-y-6">
+            <ProjectsPanel
+              loggedIn={auth?.loggedIn ?? false}
+              role={role}
+              org={org}
+              onOrgChange={handleOrgChange}
+            />
+            <ReadTokensPanel loggedIn={auth?.loggedIn ?? false} role={role} />
+          </div>
         )}
       </main>
 

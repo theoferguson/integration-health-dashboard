@@ -115,11 +115,13 @@ The programmatic front door.
   lands (Gmail SMTP via an App Password is the free path; Resend needs a verified
   domain), add the reset flow and promote a confirmed address to a linkable
   `users.email` so password and OAuth accounts can merge.
-- [ ] **Read-token management UI** — today minting/revoking a token needs SSH or
-  the raw admin API (surfaced during the prod smoke test); a real user needs a
-  settings screen to create, list (name + prefix + `last_used_at`), and revoke
-  tokens. Server-side CRUD already exists (`/api/read-tokens`); this is the web
-  layer over it, admin-gated like Projects.
+- [x] **Read-token management UI** — minting/revoking a token needed SSH or the
+  raw admin API (surfaced during the prod smoke test). Now a `ReadTokensPanel`
+  in the Projects tab (where the org's other credentials already live, rather
+  than a fifth tab): list active tokens with prefix + relative `last_used_at`,
+  admin-only create with a one-time secret reveal, and revoke behind a confirm.
+  Pure web layer — the server CRUD at `/api/read-tokens` was already there, and
+  the panel mirrors its member-read / admin-write split.
 
 Depends on / benefits from: #7 (`status` widening — agent/analytics events),
 #8 (OTel mapping — agent-legible field names). Does **not** block Door 1.
