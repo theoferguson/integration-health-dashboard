@@ -266,6 +266,41 @@ export async function deleteProjectRequest(id: string): Promise<void> {
   await apiCall(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
 }
 
+// ============ Read Token APIs ============
+// Credentials for the /api/v1 read surface and the MCP server. Distinct from a
+// project's ingest api_key (write) and from the session.
+
+export interface ReadTokenSummary {
+  id: string;
+  orgId: string;
+  name: string;
+  /** Non-secret display snippet, e.g. "ihd_read_ab12cd". */
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export async function fetchReadTokens(): Promise<ReadTokenSummary[]> {
+  const data = await apiCall<{ tokens: ReadTokenSummary[] }>(buildUrl('/read-tokens'));
+  return data.tokens;
+}
+
+/** The `secret` here is shown once and is never retrievable again. */
+export async function createReadTokenRequest(
+  name: string
+): Promise<{ token: ReadTokenSummary; secret: string }> {
+  return apiCall(`${API_BASE}/read-tokens`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function revokeReadTokenRequest(id: string): Promise<void> {
+  await apiCall(`${API_BASE}/read-tokens/${id}`, { method: 'DELETE' });
+}
+
 // ============ Org APIs ============
 
 export type OrgRole = 'admin' | 'viewer';
