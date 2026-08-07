@@ -6,17 +6,18 @@ Code, the MCP Inspector, and other header-capable hosts) can call the dashboard'
 data as tools — "which integrations are degraded, and why?" — instead of
 constructing HTTP requests by hand.
 
-There are two ways to connect. **One works today; one is planned.**
+There are two ways to connect. **Both work today.**
 
 | Path | Auth | Status | Best for |
 | --- | --- | --- | --- |
 | **A — Read token** | paste an `ihd_read_*` bearer token | ✅ **Available now** | Claude Code, MCP Inspector, any host that lets you set a request header |
-| **B — Browser sign-in (OAuth)** | click "Connect", sign in in a browser | 🚧 **Planned (Phase 4)** | Claude.ai / Claude Desktop / ChatGPT one-click connectors |
+| **B — Browser sign-in (OAuth)** | click "Connect", sign in in a browser | ✅ **Available now** | Claude.ai / Claude Desktop / ChatGPT one-click connectors |
 
 Both paths hit the exact same tools over the exact same org-scoped data — only
 *how you authenticate* differs. The auth check lives behind one swappable
-boundary (`packages/api/src/mcp/auth.ts`), so when Path B ships, none of the
-tools or transport wiring changes.
+boundary (`packages/api/src/mcp/auth.ts`), which now **accepts either
+credential** — so adding OAuth did not break any existing read-token setup, and
+no tool or transport wiring changed.
 
 ---
 
@@ -120,41 +121,68 @@ Example intents that work well:
 - **Revoke anytime.** Revoking the token (admin API / store) immediately returns
   `401` on the next call.
 
-### Why not the Claude.ai one-click connector (yet)?
+### When to use Path A vs Path B
 
 Claude.ai / Claude Desktop custom connectors **don't accept a user-pasted bearer
-token** — they require an OAuth flow. So Path A targets Claude Code, the
-Inspector, and other header-capable hosts today. The one-click experience is
-Path B.
+token** — they require OAuth, so use **Path B** there. Path A remains the fastest
+route for Claude Code, the Inspector, and other header-capable hosts, and for
+unattended/CI agents where no human is present to click through a browser.
 
 ---
 
-## Path B — Browser sign-in / OAuth (🚧 planned, Phase 4)
+## Path B — Browser sign-in / OAuth (available now)
 
-> **Not available yet.** This section describes the planned experience so you know
-> where it's headed; there are no steps to follow today. Use Path A for now.
-
-The goal is the same "add a connector" flow you see for major MCP integrations
-(Notion, Atlassian, etc.): in Claude.ai / Claude Desktop / ChatGPT you'll click
-**Add connector → IHD**, a browser window opens, you **sign in** (Google,
-Facebook, GitHub, or email), approve access, and you're connected — **no token to
+The same "add a connector" flow you see for major MCP integrations: click **Add
+connector**, a browser window opens, you **sign in** and approve — **no token to
 mint or paste.**
 
-What it will involve under the hood (for the curious):
+### Steps
 
-- IHD runs an **OAuth 2.1 authorization server** (built on the MCP TypeScript
-  SDK's provider scaffold) with PKCE and dynamic client registration / CIMD, plus
-  the discovery metadata (`/.well-known/oauth-protected-resource`,
-  `/.well-known/oauth-authorization-server`) MCP hosts look for.
-- Sign-in **federates to the identity providers** added in Phases 2–3 (Google /
-  Facebook / GitHub / email + magic link).
-- The MCP server becomes an **OAuth resource server**: it validates the
-  access token (audience-checked) at the same `mcp/auth.ts` boundary that today
-  validates a read token. **The tools and transport don't change** — only how a
-  caller is authenticated.
+1. In Claude.ai or Claude Desktop, go to **Settings → Connectors → Add custom
+   connector**.
+2. Enter the server URL:
 
-Tracking: see ROADMAP #11 (Door 2). When Path B ships, this section becomes a
-real step-by-step and the table at the top flips to ✅.
+   ```
+   https://integration-health-dashboard.fly.dev/mcp
+   ```
+
+3. Click **Connect**. A browser window opens.
+4. **Sign in** — Google, GitHub, Facebook, or email + password. (If you're already
+   signed in to the dashboard, this step is skipped.)
+5. You'll see an **Authorize connection** screen naming the client and the
+   organization it will read. Click **Allow**.
+6. You're connected. The connector's tools appear in the client.
+
+That's it — no configuration file, no header, no secret to store.
+
+### What's happening under the hood
+
+- IHD runs an **OAuth 2.1 authorization server** on the MCP TypeScript SDK's
+  provider scaffold, with **PKCE (S256, mandatory)** and **dynamic client
+  registration** (RFC 7591), plus the discovery metadata MCP hosts look for:
+  `/.well-known/oauth-authorization-server` and
+  `/.well-known/oauth-protected-resource/mcp`. A `401` from `/mcp` carries a
+  `WWW-Authenticate: Bearer resource_metadata="…"` pointer (RFC 9728), which is
+  how a connector bootstraps the flow from nothing but the URL.
+- Clients are registered **public, with no client secret** — PKCE is what
+  authenticates the exchange. (The SDK compares client secrets in plaintext, so
+  not issuing one means there's no usable credential sitting in the database.)
+- Sign-in **reuses the same session and identity providers** as the dashboard
+  (Google / GitHub / Facebook / email + password), so an OAuth grant is tied to a
+  real account and its org.
+- The MCP server acts as an **OAuth resource server**: the access token is
+  validated and **audience-checked (RFC 8707)** at the same `mcp/auth.ts`
+  boundary that validates a read token, so a token minted for a different
+  resource can't be replayed here.
+
+### Security notes
+
+- **Read-only.** The consent screen says so, and it's true at the tool level —
+  every MCP tool wraps a read path.
+- **Authorization codes are single-use** and expire in 60 seconds.
+- **Refresh tokens rotate.** Using an old one after a refresh fails, which is what
+  surfaces a stolen token instead of granting silent parallel access.
+- **Access tokens expire in 1 hour**; the client refreshes automatically.
 
 ---
 
@@ -162,8 +190,10 @@ real step-by-step and the table at the top flips to ✅.
 
 | Response | Meaning | Fix |
 | --- | --- | --- |
-| `401 unauthorized` | No token sent | Add the `Authorization: Bearer ...` header. |
-| `401 invalid_token` | Token is wrong or revoked | Mint a fresh token; update your host config. |
+| `401 unauthorized` | No token sent | Add the `Authorization: Bearer ...` header (Path A), or connect via OAuth (Path B). |
+| `401 invalid_token` | Token is wrong, revoked, or expired | Mint a fresh read token, or reconnect the OAuth connector. |
+| `401` mentioning *different resource* | An OAuth token minted for another server was replayed here (RFC 8707) | Reconnect the connector against this server's URL. |
+| `400 invalid_grant` on connect | Code expired (60s), was already used, or PKCE failed | Start the connection again from your client. |
 | `403 forbidden` | Disallowed `Origin` (DNS-rebinding guard) | Use the real host; browser clients must originate from an allowed origin. |
 | `405 method_not_allowed` | Non-POST to `/mcp` | MCP uses `POST`; check your host's transport is "Streamable HTTP". |
 | `429 rate_limited` | Over the per-token/IP budget | Back off; the `RateLimit-*` headers say when to retry. |

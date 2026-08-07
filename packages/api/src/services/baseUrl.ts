@@ -16,3 +16,15 @@ export function resolveBaseUrl(req: Request): string {
   if (configured) return configured.replace(/\/+$/, '');
   return `${req.protocol}://${req.get('host')}`;
 }
+
+/**
+ * The same origin, without a request to derive it from - for things fixed at
+ * boot rather than per-request, like the OAuth authorization server's advertised
+ * issuer. There is no Host header to fall back on here, so local dev falls back
+ * to the dev port; PUBLIC_BASE_URL is required in prod (it already is set).
+ */
+export function publicBaseUrl(): string {
+  const configured = process.env.PUBLIC_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, '');
+  return `http://localhost:${process.env.PORT || 3000}`;
+}

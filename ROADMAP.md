@@ -77,9 +77,25 @@ The programmatic front door.
   remote streamable-HTTP server at `POST /mcp` with 8 read-only tools wrapping the
   same service functions as `/api/v1`, authed by the `ihd_read_*` read token.
   Live once deployed.)* The read-token check is isolated behind one swappable
-  boundary (`mcp/auth.ts`); **browser-OAuth for the one-click Claude.ai/Desktop
-  connectors is a later slice (Phase 4)** that replaces only that boundary — the
-  tools and transport wiring don't change.
+  boundary (`mcp/auth.ts`); browser-OAuth for the one-click Claude.ai/Desktop
+  connectors shipped as Phase 4 below.
+- [x] **OAuth authorization server for the MCP connectors (Phase 4)** — the
+  one-click "Add connector → sign in → Allow" flow, so Claude.ai / Claude Desktop
+  can connect without a pasted token. Built on the MCP SDK's `mcpAuthRouter` +
+  an `OAuthServerProvider` implemented over SQLite (`services/oauthStore.ts`,
+  `mcp/oauthProvider.ts`): PKCE S256 (mandatory), RFC 7591 dynamic client
+  registration, RFC 8414 + RFC 9728 discovery metadata, and a
+  `WWW-Authenticate: Bearer resource_metadata="…"` challenge on `/mcp` 401s so a
+  connector can bootstrap from the URL alone.
+  Design notes worth keeping: `provider.authorize()` gets no `req`, so it parks
+  the request and redirects to **our own** `/oauth/consent`, which is where the
+  session cookie is readable — that's the bridge between the SDK's AS and the
+  app's existing sign-in. Clients register **public with no secret** (the SDK
+  compares client secrets in plaintext, so issuing one would mean storing a
+  usable credential). Codes are single-use/60s, refresh tokens rotate, access
+  tokens are audience-checked per RFC 8707, and the boundary **dual-accepts** the
+  original `ihd_read_*` token so every Phase 1 `claude mcp add` setup keeps
+  working.
 - [x] **Email + password sign-in** (Phase 3 Build 2) — a local account is just
   another identity (`provider='password'`, `provider_user_id` = the normalized
   email), so signup/login reuse `findOrCreateUserByIdentity` and the same session

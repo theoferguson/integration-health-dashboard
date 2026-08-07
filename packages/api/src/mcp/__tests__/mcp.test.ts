@@ -129,7 +129,12 @@ describe('MCP server (read-token)', () => {
     it('401s (with WWW-Authenticate) when no token is provided', async () => {
       const res = await request(app).post('/mcp').send({ jsonrpc: '2.0', id: 1, method: 'ping' });
       expect(res.status).toBe(401);
-      expect(res.headers['www-authenticate']).toBe('Bearer');
+      // Phase 4: the challenge carries the RFC 9728 resource_metadata pointer, so
+      // a one-click connector can discover the authorization server from a 401
+      // alone. Before OAuth this was a bare 'Bearer'.
+      expect(res.headers['www-authenticate']).toMatch(
+        /^Bearer resource_metadata="https?:\/\/.+\/\.well-known\/oauth-protected-resource\/mcp"$/
+      );
       expect(res.body.error.code).toBe('unauthorized');
     });
 

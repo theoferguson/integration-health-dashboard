@@ -29,8 +29,24 @@ const router = Router();
 
 const SESSION_COOKIE = 'ihd_session';
 const STATE_COOKIE = 'ihd_oauth_state';
+const NEXT_COOKIE = 'ihd_auth_next';
 const isProd = process.env.NODE_ENV === 'production';
 const FRONTEND_DEV_URL = 'http://localhost:5173';
+
+/**
+ * A post-sign-in destination, or null. Used by the OAuth consent page, which
+ * sends the user off to sign in and needs them back.
+ *
+ * SECURITY: only same-origin PATHS are allowed. Without this the parameter is an
+ * open redirect - `?next=https://evil.example` would bounce a freshly
+ * authenticated user off-site. A leading `//` (or `/\`) is rejected too, since
+ * browsers read those as protocol-relative URLs to another host.
+ */
+function safeNextPath(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.startsWith('/')) return null;
+  if (value.startsWith('//') || value.startsWith('/\\')) return null;
+  return value;
+}
 
 /**
  * The redirect_uri for a given provider. It is now PER-PROVIDER
@@ -91,6 +107,18 @@ router.get('/login/:provider', (req, res) => {
     maxAge: 10 * 60 * 1000,
   });
 
+  // Carried in a cookie rather than round-tripped through the provider, so the
+  // destination can't be tampered with between here and the callback.
+  const next = safeNextPath(req.query.next);
+  if (next) {
+    res.cookie(NEXT_COOKIE, next, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: 10 * 60 * 1000,
+    });
+  }
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: callbackUrl(req, provider),
@@ -106,7 +134,14 @@ router.get('/callback/:provider', async (req, res) => {
   const { provider } = req.params;
   const config = lookupProvider(provider);
 
-  const redirectHome = () => res.redirect(isProd ? '/' : FRONTEND_DEV_URL);
+  // Re-validated on the way out, not just on the way in: the cookie is ours and
+  // httpOnly, but treating it as trusted here would make any future writer of
+  // that cookie an open redirect.
+  const next = safeNextPath(req.cookies?.[NEXT_COOKIE]);
+  const redirectHome = () => {
+    if (next) res.clearCookie(NEXT_COOKIE);
+    return res.redirect(next ?? (isProd ? '/' : FRONTEND_DEV_URL));
+  };
 
   if (!config) {
     return res.status(404).send(`Unknown auth provider: ${provider}`);

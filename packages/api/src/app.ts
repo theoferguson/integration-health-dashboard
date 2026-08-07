@@ -3,9 +3,12 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import routes from './routes/index.js';
+import oauthRoutes from './routes/oauth.js';
+import { ihdOAuthProvider, MCP_SCOPE } from './mcp/oauthProvider.js';
 import { renderLlmsTxt } from './services/apiContract.js';
-import { resolveBaseUrl } from './services/baseUrl.js';
+import { resolveBaseUrl, publicBaseUrl } from './services/baseUrl.js';
 import { READ_MAX, readIpRateLimiter, readTokenRateLimiter } from './middleware/rateLimit.js';
 import {
   mcpOriginGuard,
@@ -33,6 +36,27 @@ export function createApp() {
   app.use(cors());
   app.use(express.json());
   app.use(cookieParser());
+
+  // OAuth authorization server for the MCP connectors (ROADMAP #11, Phase 4).
+  // MUST be mounted at the app root (the SDK requires it) and BEFORE the
+  // static/SPA block, or /.well-known/* and /authorize would fall through to the
+  // SPA shell in production. `issuerUrl` and `resourceServerUrl` come from
+  // PUBLIC_BASE_URL so the advertised metadata never reflects a client's Host
+  // header - a forged issuer would send clients to someone else's token endpoint.
+  const baseUrl = new URL(publicBaseUrl());
+  app.use(
+    mcpAuthRouter({
+      provider: ihdOAuthProvider,
+      issuerUrl: baseUrl,
+      resourceServerUrl: new URL('/mcp', baseUrl),
+      resourceName: 'Integration Health Dashboard',
+      scopesSupported: [MCP_SCOPE],
+      serviceDocumentationUrl: new URL('/llms.txt', baseUrl),
+    })
+  );
+  // The consent screen the provider's authorize() redirects to - our own route,
+  // not the SDK's, because only we can read the session cookie.
+  app.use('/oauth', oauthRoutes);
 
   // API routes
   app.use('/api', routes);
