@@ -57,6 +57,13 @@ export interface EventStats {
   successRate: number | null;
   /** Most recent event ever, NOT just within the 24h window. */
   lastSync: Date | string | null;
+  /**
+   * How long this integration normally goes between events (the longest gap in
+   * its recent history), or null when there aren't enough events to tell.
+   * Silence is judged against this rather than a fixed window - a 2-minute
+   * poller and a weekly report go quiet on very different timescales.
+   */
+  expectedIntervalMs: number | null;
 }
 
 interface EventRow {
@@ -283,6 +290,47 @@ export function getDistinctIntegrations(orgId?: string): string[] {
   return rows.map((r) => r.integration);
 }
 
+/** How many recent events to derive an integration's reporting rhythm from. */
+const CADENCE_SAMPLE = 20;
+
+/**
+ * Below this many events there is no rhythm to infer. Two events is a single
+ * gap, and a one-off smoke test that fired three events in a row months ago
+ * would otherwise "normally report every 2 seconds" and be declared dead
+ * forever. Something that only ever ran once was never on a schedule to miss.
+ */
+const CADENCE_MIN_EVENTS = 5;
+
+/**
+ * How long this integration normally goes quiet: the LONGEST gap between its
+ * recent events. Silence is judged against this instead of a fixed window,
+ * because integrations are discovered from events and never declare a schedule.
+ *
+ * Longest, not median or mean. A reporter that emits a burst of events and then
+ * sleeps has a near-zero median gap, and judging it by that would call it dead
+ * moments after every healthy burst. The longest recent gap is the only one of
+ * the three that already contains the quiet stretch such a reporter considers
+ * normal. It errs toward under-alerting - one past outage inside the sample
+ * raises the bar for the next one - which is the right way to be wrong here: a
+ * dashboard that cries wolf on healthy integrations gets ignored, and then it
+ * catches nothing at all.
+ *
+ * Null below CADENCE_MIN_EVENTS - too little history to claim a rhythm.
+ *
+ * ponytail: fooled by a reporter whose bursts exceed CADENCE_SAMPLE events, since
+ * the sample then never spans a quiet stretch. Have integrations declare a
+ * cadence if that ever shows up.
+ */
+function normalQuietMs(timestamps: number[]): number | null {
+  if (timestamps.length < CADENCE_MIN_EVENTS) return null;
+
+  let longest = 0;
+  for (let i = 1; i < timestamps.length; i++) {
+    longest = Math.max(longest, timestamps[i - 1] - timestamps[i]); // newest-first
+  }
+  return longest > 0 ? longest : null;
+}
+
 export function getEventStats(integration: string, orgId?: string): EventStats {
   const last24hTime = Date.now() - 24 * 60 * 60 * 1000;
 
@@ -307,6 +355,14 @@ export function getEventStats(integration: string, orgId?: string): EventStats {
     lastTimestamp: number | null;
   };
 
+  const recent = db
+    .prepare(
+      `SELECT timestamp FROM events
+       WHERE integration = ? ${orgClause}
+       ORDER BY timestamp DESC LIMIT ?`
+    )
+    .all(integration, ...orgParams, CADENCE_SAMPLE) as { timestamp: number }[];
+
   const total = row.total;
   const failures = row.failures || 0;
 
@@ -315,6 +371,7 @@ export function getEventStats(integration: string, orgId?: string): EventStats {
     errorsLast24h: failures,
     successRate: total > 0 ? Math.round(((total - failures) / total) * 100) : null,
     lastSync: row.lastTimestamp ? new Date(row.lastTimestamp) : null,
+    expectedIntervalMs: normalQuietMs(recent.map((r) => r.timestamp)),
   };
 }
 

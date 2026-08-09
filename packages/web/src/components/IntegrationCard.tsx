@@ -106,6 +106,16 @@ export function IntegrationCard({ integration, onClick, metrics }: IntegrationCa
         </div>
       )}
 
+      {integration.stale && (
+        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20">
+          <span className="text-xs sm:text-sm font-medium">
+            Not reporting
+            {integration.expectedIntervalMs !== null &&
+              ` — normally every ${formatDuration(integration.expectedIntervalMs)}`}
+          </span>
+        </div>
+      )}
+
       {integration.errorsLast24h > 0 && (
         <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current border-opacity-20">
           <span className="text-xs sm:text-sm font-medium">
@@ -115,6 +125,14 @@ export function IntegrationCard({ integration, onClick, metrics }: IntegrationCa
       )}
     </div>
   );
+}
+
+/** Coarse duration for the cadence hint - "2m", "1h", "1d". */
+function formatDuration(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${Math.max(minutes, 1)}m`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`;
 }
 
 function formatTimeAgo(date: Date): string {

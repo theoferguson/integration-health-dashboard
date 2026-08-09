@@ -17,4 +17,17 @@ export interface Integration {
   successRate: number | null;
   eventsLast24h: number;
   errorsLast24h: number;
+  /**
+   * How long this integration normally goes between events; null when it has
+   * too little history to tell. Compare against `lastSync` to see how overdue
+   * it is - that ratio, not the success rate, is what catches a reporter that
+   * has stopped reporting.
+   */
+  expectedIntervalMs: number | null;
+  /**
+   * True when the integration has stopped reporting on its own schedule. This
+   * is the difference between "failing" and "gone": a stale integration may
+   * have a spotless success rate on everything it ever sent.
+   */
+  stale: boolean;
 }
