@@ -137,7 +137,12 @@ export function getMonitorSeries(
   const since = Date.now() - windowMs;
   const rows = db
     .prepare(
-      `SELECT (timestamp / ?) * ? AS bucket, COUNT(*) as count
+      // CAST is load-bearing: better-sqlite3 binds a JS number as REAL, so
+      // `timestamp / ?` is float division and multiplying back returns the
+      // original timestamp - every event its own bucket, keyed at its exact
+      // millisecond. Nothing aggregates and no key ever lines up with the
+      // aligned boundaries the graph looks them up by.
+      `SELECT CAST(timestamp / ? AS INTEGER) * ? AS bucket, COUNT(*) as count
        FROM events
        WHERE project_id IN (SELECT id FROM projects WHERE org_id = ?)
          AND timestamp >= ? AND (${clause})
