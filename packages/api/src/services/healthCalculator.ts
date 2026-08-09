@@ -34,10 +34,14 @@ function calculateStatus(stats: EventStats, overdue: number | null): Integration
     if (overdue >= STALE) return 'degraded';
   }
 
-  // No events in the 24h window and no cadence to judge by - fall back to the
-  // window itself. A reporting history that has gone quiet is stale; an id that
-  // never reported at all has nothing to be stale about.
+  // Nothing in the 24h window. Where a rhythm is known the check above already
+  // had the final say, so reaching here means it is simply not due yet - a
+  // weekly reporter is not sick for the six days between reports. Only fall
+  // back to the fixed window when there is no rhythm to judge by, and then only
+  // against a reporting history; an id that never reported at all has nothing
+  // to be stale about.
   if (stats.successRate === null) {
+    if (overdue !== null) return 'healthy';
     return stats.lastSync ? 'degraded' : 'healthy';
   }
 
