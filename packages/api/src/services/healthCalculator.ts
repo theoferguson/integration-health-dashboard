@@ -1,14 +1,22 @@
 import type { Integration, IntegrationStatus } from '../types/index.js';
 import { HEALTH_THRESHOLDS } from '../types/index.js';
-import { getEventStats, getDistinctIntegrations } from './eventStore.js';
+import { getEventStats, getDistinctIntegrations, type EventStats } from './eventStore.js';
 
-function calculateStatus(successRate: number, errorsLast24h: number): IntegrationStatus {
+function calculateStatus(stats: EventStats): IntegrationStatus {
   const { HEALTHY, DEGRADED } = HEALTH_THRESHOLDS;
 
-  if (successRate >= HEALTHY.MIN_SUCCESS_RATE && errorsLast24h < HEALTHY.MAX_ERRORS_24H) {
+  // Nothing in the window. An integration with a reporting history that has
+  // gone quiet is stale, not healthy - silence is the failure mode a health
+  // dashboard most needs to surface. With no history at all there is nothing
+  // to be stale about (an id that never reported), so leave it healthy.
+  if (stats.successRate === null) {
+    return stats.lastSync ? 'degraded' : 'healthy';
+  }
+
+  if (stats.successRate >= HEALTHY.MIN_SUCCESS_RATE && stats.errorsLast24h < HEALTHY.MAX_ERRORS_24H) {
     return 'healthy';
   }
-  if (successRate >= DEGRADED.MIN_SUCCESS_RATE || errorsLast24h < DEGRADED.MAX_ERRORS_24H) {
+  if (stats.successRate >= DEGRADED.MIN_SUCCESS_RATE || stats.errorsLast24h < DEGRADED.MAX_ERRORS_24H) {
     return 'degraded';
   }
   return 'down';
@@ -19,7 +27,7 @@ export function getIntegrationHealth(integrationId: string, orgId?: string): Int
 
   return {
     id: integrationId,
-    status: calculateStatus(stats.successRate, stats.errorsLast24h),
+    status: calculateStatus(stats),
     lastSync: stats.lastSync,
     successRate: stats.successRate,
     eventsLast24h: stats.eventsLast24h,

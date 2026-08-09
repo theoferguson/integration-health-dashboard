@@ -13,7 +13,8 @@ export interface Integration {
   id: string;
   status: IntegrationStatus;
   lastSync: Date | string | null;
-  successRate: number;
+  /** Percent successful over the last 24h; null when nothing reported in that window. */
+  successRate: number | null;
   eventsLast24h: number;
   errorsLast24h: number;
 }

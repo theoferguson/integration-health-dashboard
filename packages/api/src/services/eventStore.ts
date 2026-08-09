@@ -48,7 +48,14 @@ export interface PaginatedEvents {
 export interface EventStats {
   eventsLast24h: number;
   errorsLast24h: number;
-  successRate: number;
+  /**
+   * Percent successful over the last 24h, or null when nothing reported in that
+   * window. Null rather than 100: an integration that has gone silent has no
+   * success rate, and defaulting it to a perfect score made a dead integration
+   * indistinguishable from a flawless one.
+   */
+  successRate: number | null;
+  /** Most recent event ever, NOT just within the 24h window. */
   lastSync: Date | string | null;
 }
 
@@ -282,29 +289,31 @@ export function getEventStats(integration: string, orgId?: string): EventStats {
   const orgClause = orgId ? 'AND project_id IN (SELECT id FROM projects WHERE org_id = ?)' : '';
   const orgParams = orgId ? [orgId] : [];
 
+  // Counts are windowed to 24h; lastTimestamp deliberately is not - "last sync"
+  // means the last event ever, so a silent integration reports when it went
+  // quiet instead of claiming it never reported at all.
   const row = db
     .prepare(
       `SELECT
-         COUNT(*) as total,
-         SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) as failures,
+         COUNT(CASE WHEN timestamp >= ? THEN 1 END) as total,
+         SUM(CASE WHEN timestamp >= ? AND status = 'failure' THEN 1 ELSE 0 END) as failures,
          MAX(timestamp) as lastTimestamp
        FROM events
-       WHERE integration = ? AND timestamp >= ? ${orgClause}`
+       WHERE integration = ? ${orgClause}`
     )
-    .get(integration, last24hTime, ...orgParams) as {
+    .get(last24hTime, last24hTime, integration, ...orgParams) as {
     total: number;
-    failures: number;
+    failures: number | null;
     lastTimestamp: number | null;
   };
 
   const total = row.total;
   const failures = row.failures || 0;
-  const successRate = total > 0 ? Math.round(((total - failures) / total) * 100) : 100;
 
   return {
     eventsLast24h: total,
     errorsLast24h: failures,
-    successRate,
+    successRate: total > 0 ? Math.round(((total - failures) / total) * 100) : null,
     lastSync: row.lastTimestamp ? new Date(row.lastTimestamp) : null,
   };
 }

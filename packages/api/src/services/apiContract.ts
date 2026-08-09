@@ -218,7 +218,7 @@ export function renderLlmsTxt(baseUrl: string, readRateLimitPerMin: number): str
 
 > IHD collects health events from third-party integrations, classifies failures with AI, and exposes both a monitoring UI for non-technical users and a read-only HTTP API for agents. This file describes the API. Base URL: ${baseUrl}
 
-The unit of data is an **event**: one integration (\`weather\`, \`stripe\`, ...) reported one occurrence (\`forecast.sync\`) that succeeded or failed, with an optional payload, error, and reporter-supplied metrics and tags. Integrations are discovered from the events themselves - there is no static registry, so the set of integration ids differs per organization. Health is derived per integration from success rate and error count over a rolling 24h window and reduces to \`healthy\`, \`degraded\`, or \`down\`.
+The unit of data is an **event**: one integration (\`weather\`, \`stripe\`, ...) reported one occurrence (\`forecast.sync\`) that succeeded or failed, with an optional payload, error, and reporter-supplied metrics and tags. Integrations are discovered from the events themselves - there is no static registry, so the set of integration ids differs per organization. Health is derived per integration from success rate and error count over a rolling 24h window and reduces to \`healthy\`, \`degraded\`, or \`down\`. An integration that reported before but sent nothing in that window is \`degraded\` with \`successRate: null\` - it is stale, not passing. \`lastSync\` is the last event ever (outside the window too), so it tells you when the silence started.
 
 ## Authentication
 
