@@ -76,7 +76,9 @@ export function IntegrationCard({ integration, onClick, metrics }: IntegrationCa
       <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-xs sm:text-sm">
         <div>
           <div className="opacity-60">Success</div>
-          <div className="font-medium">{integration.successRate}%</div>
+          <div className="font-medium">
+            {integration.successRate === null ? '—' : `${integration.successRate}%`}
+          </div>
         </div>
         <div>
           <div className="opacity-60">Events</div>

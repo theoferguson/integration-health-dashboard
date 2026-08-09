@@ -5,6 +5,7 @@ import {
   getOverallHealth,
 } from '../healthCalculator.js';
 import { createEvent, clearEvents } from '../eventStore.js';
+import { db } from '../../db/connection.js';
 
 describe('healthCalculator', () => {
   beforeEach(() => {
@@ -16,10 +17,30 @@ describe('healthCalculator', () => {
     it('should return healthy status when no events exist', () => {
       const health = getIntegrationHealth('weather');
 
+      // Never reported at all - nothing to be stale about.
       expect(health.status).toBe('healthy');
-      expect(health.successRate).toBe(100);
+      expect(health.successRate).toBeNull();
       expect(health.eventsLast24h).toBe(0);
       expect(health.errorsLast24h).toBe(0);
+    });
+
+    it('should return degraded when an integration has gone silent', () => {
+      const event = createEvent({
+        integration: 'weather',
+        eventType: 'test.event',
+        status: 'success',
+        payload: {},
+      });
+      const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+      db.prepare('UPDATE events SET timestamp = ? WHERE id = ?').run(eightDaysAgo, event.id);
+
+      const health = getIntegrationHealth('weather');
+
+      // Reported before, nothing in 24h: stale, not a perfect score.
+      expect(health.status).toBe('degraded');
+      expect(health.successRate).toBeNull();
+      expect(health.eventsLast24h).toBe(0);
+      expect(health.lastSync).toEqual(new Date(eightDaysAgo));
     });
 
     it('should return healthy status with high success rate', () => {

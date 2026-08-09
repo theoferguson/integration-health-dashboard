@@ -275,13 +275,34 @@ describe('eventStore', () => {
       expect(stats.lastSync).toBeInstanceOf(Date);
     });
 
-    it('should return 100% success rate with no events', () => {
+    it('should return a null success rate with no events', () => {
       const stats = getEventStats('weather');
 
-      expect(stats.successRate).toBe(100);
+      expect(stats.successRate).toBeNull();
       expect(stats.eventsLast24h).toBe(0);
       expect(stats.errorsLast24h).toBe(0);
       expect(stats.lastSync).toBeNull();
+    });
+
+    // The bug this guards: counts are windowed to 24h but lastSync is not, so a
+    // silent integration must report WHEN it went quiet with no success rate -
+    // not "never synced, 100% successful".
+    it('should report lastSync from outside the 24h window with no rate', () => {
+      const event = createEvent({
+        integration: 'weather',
+        eventType: 'test',
+        status: 'success',
+        payload: {},
+      });
+      const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+      db.prepare('UPDATE events SET timestamp = ? WHERE id = ?').run(eightDaysAgo, event.id);
+
+      const stats = getEventStats('weather');
+
+      expect(stats.eventsLast24h).toBe(0);
+      expect(stats.errorsLast24h).toBe(0);
+      expect(stats.successRate).toBeNull();
+      expect(stats.lastSync).toEqual(new Date(eightDaysAgo));
     });
 
     it('should only count events for specified integration', () => {
