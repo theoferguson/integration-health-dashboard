@@ -7,3 +7,4 @@ export { ProjectsPanel } from './ProjectsPanel';
 export { ReadTokensPanel } from './ReadTokensPanel';
 export { MonitorsPanel } from './MonitorsPanel';
 export { SignInButton } from './SignInModal';
+export { DocsPanel } from './DocsPanel';

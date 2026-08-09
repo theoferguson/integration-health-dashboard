@@ -4,11 +4,11 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, ReadTokensPanel, MonitorsPanel, SignInButton } from './components';
+import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, ReadTokensPanel, MonitorsPanel, SignInButton, DocsPanel } from './components';
 import { useHealthData, useAuth } from './hooks';
 import type { IntegrationEvent } from './types';
 
-type TabType = 'integrations' | 'events' | 'monitors' | 'projects';
+type TabType = 'integrations' | 'events' | 'monitors' | 'projects' | 'docs';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('integrations');
@@ -127,6 +127,12 @@ function App() {
             >
               Projects
             </TabButton>
+            <TabButton
+              active={activeTab === 'docs'}
+              onClick={() => setActiveTab('docs')}
+            >
+              Docs
+            </TabButton>
           </div>
         </div>
       </header>
@@ -227,6 +233,10 @@ function App() {
             <ReadTokensPanel loggedIn={auth?.loggedIn ?? false} role={role} />
           </div>
         )}
+
+        {/* Readable signed out - someone evaluating the dashboard needs the
+            setup steps before they have an account. */}
+        {activeTab === 'docs' && <DocsPanel />}
       </main>
 
       {/* Event detail / triage modal - opens for any event; triage tools show only for failures */}
