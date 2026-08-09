@@ -6,6 +6,8 @@ report to. Apps send events over an SDK (or a plain `POST /api/ingest`); the
 dashboard shows integration health at a glance, AI-classifies failures on demand,
 and lets teams graph and triage what matters.
 
+**[Getting started](./docs/GETTING-STARTED.md)** ·
+**[Connecting an MCP client](./docs/CONNECTING-MCP.md)** ·
 **[Original design doc (historical)](./docs/blueprint.md)** ·
 **[Roadmap](./ROADMAP.md)**
 
