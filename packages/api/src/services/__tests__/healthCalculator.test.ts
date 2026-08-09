@@ -55,12 +55,16 @@ describe('healthCalculator', () => {
     });
 
     it('leaves a slow reporter alone while it is merely between reports', () => {
-      // A weekly report, quiet for a day. The old 24h window called this stale;
-      // it is simply not due yet.
-      seedCadence('nyt-books', { everyMs: 7 * 24 * 60 * MINUTE, count: 5, silentForMs: 24 * 60 * MINUTE });
+      // A weekly report, quiet for three days: well outside the 24h window, and
+      // nowhere near due. Judged by the window alone this reads as degraded
+      // forever, which would make every slow integration permanently yellow.
+      const WEEK = 7 * 24 * 60 * MINUTE;
+      seedCadence('nyt-books', { everyMs: WEEK, count: 5, silentForMs: 3 * 24 * 60 * MINUTE });
 
       const health = getIntegrationHealth('nyt-books');
 
+      expect(health.eventsLast24h).toBe(0); // the window has nothing to say
+      expect(health.successRate).toBeNull();
       expect(health.stale).toBe(false);
       expect(health.status).toBe('healthy');
     });
