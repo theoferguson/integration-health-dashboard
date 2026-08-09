@@ -27,6 +27,27 @@ export const HEALTH_THRESHOLDS = {
 } as const;
 
 /**
+ * Staleness Thresholds
+ *
+ * How overdue an integration must be - in multiples of how long it normally
+ * goes quiet - before silence counts against its health. A reporter that has
+ * stopped reporting is the failure a success rate can never express: every
+ * event it ever sent may have succeeded.
+ */
+export const STALENESS = {
+  /** Missed roughly this many reports -> degraded. */
+  STALE: 3,
+  /** Missed roughly this many -> down. Nothing this overdue is coming back on its own. */
+  DEAD: 10,
+  /**
+   * Never call an integration stale below this much silence, whatever its
+   * cadence. Keeps sub-minute and bursty reporters from flapping between
+   * healthy and degraded in the gaps they consider normal.
+   */
+  MIN_SILENCE_MS: 5 * 60 * 1000,
+} as const;
+
+/**
  * Polling and Timing Configuration
  */
 export const TIMING = {

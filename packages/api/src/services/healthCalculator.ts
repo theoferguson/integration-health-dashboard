@@ -1,14 +1,42 @@
 import type { Integration, IntegrationStatus } from '../types/index.js';
-import { HEALTH_THRESHOLDS } from '../types/index.js';
+import { HEALTH_THRESHOLDS, STALENESS } from '../types/index.js';
 import { getEventStats, getDistinctIntegrations, type EventStats } from './eventStore.js';
 
-function calculateStatus(stats: EventStats): IntegrationStatus {
-  const { HEALTHY, DEGRADED } = HEALTH_THRESHOLDS;
+/**
+ * How overdue an integration is: silence since its last event, as a multiple of
+ * its own cadence. 1 means "due now", 5 means it has missed roughly five
+ * reports. Null when there's no cadence to measure against.
+ *
+ * This is the signal a fixed 24h window could not carry. A 2-minute poller that
+ * dies is 720 reports overdue before a daily window even notices, while a
+ * weekly report is not late at all after a day of quiet.
+ */
+export function overdueFactor(stats: EventStats, now = Date.now()): number | null {
+  if (!stats.lastSync || !stats.expectedIntervalMs) return null;
 
-  // Nothing in the window. An integration with a reporting history that has
-  // gone quiet is stale, not healthy - silence is the failure mode a health
-  // dashboard most needs to surface. With no history at all there is nothing
-  // to be stale about (an id that never reported), so leave it healthy.
+  const silentMs = now - new Date(stats.lastSync).getTime();
+  // A fast reporter must not be called stale seconds after its last event just
+  // because its normal gap is tiny.
+  if (silentMs < STALENESS.MIN_SILENCE_MS) return 0;
+
+  return silentMs / stats.expectedIntervalMs;
+}
+
+function calculateStatus(stats: EventStats, overdue: number | null): IntegrationStatus {
+  const { HEALTHY, DEGRADED } = HEALTH_THRESHOLDS;
+  const { STALE, DEAD } = STALENESS;
+
+  // Silence first, and on its own terms: an integration can be 100% successful
+  // on every event it ever sent and still be dead right now. Rate and error
+  // count say nothing about a reporter that stopped reporting.
+  if (overdue !== null) {
+    if (overdue >= DEAD) return 'down';
+    if (overdue >= STALE) return 'degraded';
+  }
+
+  // No events in the 24h window and no cadence to judge by - fall back to the
+  // window itself. A reporting history that has gone quiet is stale; an id that
+  // never reported at all has nothing to be stale about.
   if (stats.successRate === null) {
     return stats.lastSync ? 'degraded' : 'healthy';
   }
@@ -24,14 +52,21 @@ function calculateStatus(stats: EventStats): IntegrationStatus {
 
 export function getIntegrationHealth(integrationId: string, orgId?: string): Integration {
   const stats = getEventStats(integrationId, orgId);
+  const overdue = overdueFactor(stats);
 
   return {
     id: integrationId,
-    status: calculateStatus(stats),
+    status: calculateStatus(stats, overdue),
     lastSync: stats.lastSync,
     successRate: stats.successRate,
     eventsLast24h: stats.eventsLast24h,
     errorsLast24h: stats.errorsLast24h,
+    expectedIntervalMs: stats.expectedIntervalMs,
+    // Stated rather than left to be inferred: 'degraded' alone doesn't say
+    // whether an integration is failing or has simply stopped reporting, and
+    // every consumer re-deriving that from timestamps would drift from this
+    // rule the moment it changed.
+    stale: overdue !== null && overdue >= STALENESS.STALE,
   };
 }
 

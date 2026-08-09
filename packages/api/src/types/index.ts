@@ -7,4 +7,4 @@
 export * from '@ihd/shared';
 
 // Re-export constants that API uses
-export { EVENT_STORE, HEALTH_THRESHOLDS } from '@ihd/shared';
+export { EVENT_STORE, HEALTH_THRESHOLDS, STALENESS } from '@ihd/shared';
