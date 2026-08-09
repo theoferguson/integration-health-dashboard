@@ -9,6 +9,7 @@ import {
   type CreatedProject,
   type OrgRole,
 } from '../api/client';
+import { SignInButton } from './SignInModal';
 
 interface ProjectsPanelProps {
   loggedIn: boolean;
@@ -56,12 +57,7 @@ export function ProjectsPanel({ loggedIn, role, org, onOrgChange }: ProjectsPane
     return (
       <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
         <p className="text-gray-600 mb-4">Sign in to create and manage projects.</p>
-        <a
-          href="/api/auth/login"
-          className="inline-block px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800"
-        >
-          Sign in with GitHub
-        </a>
+        <SignInButton className="inline-block px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800" />
       </div>
     );
   }
@@ -137,7 +133,7 @@ export function ProjectsPanel({ loggedIn, role, org, onOrgChange }: ProjectsPane
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="text-sm font-medium text-gray-900 mb-1">Invite code</div>
             <p className="text-xs text-gray-500 mb-2">
-              Share this with teammates. They sign in with GitHub, then paste it below to join your
+              Share this with teammates. They sign in, then paste it below to join your
               org as a viewer.
             </p>
             <div className="flex items-center gap-2">

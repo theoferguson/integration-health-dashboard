@@ -76,7 +76,7 @@ export function EventsView({ onEventClick }: EventsViewProps) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setEvents([]);
         setTotal(0);
-        setError('Sign in with GitHub to view your org’s events.');
+        setError('Sign in to view your org’s events.');
       } else {
         setError('Failed to load events');
       }
