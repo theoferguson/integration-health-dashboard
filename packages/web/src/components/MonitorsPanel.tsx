@@ -9,6 +9,7 @@ import {
 } from '../api/client';
 import type { MonitorSummary, MonitorMatchSpec, MonitorPredicate, PredicateOp } from '../types';
 import { MonitorGraph } from './MonitorGraph';
+import { SignInButton } from './SignInModal';
 
 const OPS: PredicateOp[] = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'exists'];
 const FIELD_SUGGESTIONS = [
@@ -72,12 +73,7 @@ export function MonitorsPanel({ loggedIn, isAdmin }: MonitorsPanelProps) {
     return (
       <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
         <p className="text-gray-600 mb-4">Sign in to create and view monitors.</p>
-        <a
-          href="/api/auth/login"
-          className="inline-block px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800"
-        >
-          Sign in with GitHub
-        </a>
+        <SignInButton className="inline-block px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800" />
       </div>
     );
   }

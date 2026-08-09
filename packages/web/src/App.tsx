@@ -4,9 +4,8 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, ReadTokensPanel, MonitorsPanel } from './components';
+import { Dashboard, IntegrationCard, EventStream, EventsView, ErrorTriage, ProjectsPanel, ReadTokensPanel, MonitorsPanel, SignInButton } from './components';
 import { useHealthData, useAuth } from './hooks';
-import { passwordAuthRequest } from './api/client';
 import type { IntegrationEvent } from './types';
 
 type TabType = 'integrations' | 'events' | 'monitors' | 'projects';
@@ -97,16 +96,8 @@ function App() {
                   {org ? `${org.name} · ` : ''}Signed in as {auth.login} · Sign out
                 </button>
               ) : (
-                <SignInButtons />
+                <SignInButton />
               )}
-              <a
-                href="https://github.com/theoferguson/integration-health-dashboard"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800"
-              >
-                Source
-              </a>
             </div>
           </div>
 
@@ -150,8 +141,8 @@ function App() {
               </p>
             )}
             {!auth?.loggedIn && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <SignInButtons />
+              <div className="mt-3">
+                <SignInButton />
               </div>
             )}
           </div>
@@ -256,6 +247,16 @@ function App() {
           <p className="mt-1 hidden sm:block">
             Demonstrating full-stack TypeScript and AI-assisted error classification
           </p>
+          <p className="mt-2">
+            <a
+              href="https://github.com/theoferguson/integration-health-dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-500 underline hover:text-gray-700"
+            >
+              Source
+            </a>
+          </p>
         </div>
       </footer>
     </div>
@@ -263,132 +264,6 @@ function App() {
 }
 
 // ============ Helper Components ============
-
-// Social sign-in buttons. Each links to the provider's generic OAuth entry point
-// (/api/auth/login/<provider>); the API redirects on from there.
-const SIGN_IN_PROVIDERS: { id: string; label: string }[] = [
-  { id: 'google', label: 'Continue with Google' },
-  { id: 'facebook', label: 'Continue with Facebook' },
-  { id: 'github', label: 'Continue with GitHub' },
-];
-
-function SignInButtons() {
-  return (
-    <>
-      <EmailAuthForm />
-      {SIGN_IN_PROVIDERS.map((p) => (
-        <a
-          key={p.id}
-          href={`/api/auth/login/${p.id}`}
-          className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800 whitespace-nowrap"
-        >
-          {p.label}
-        </a>
-      ))}
-    </>
-  );
-}
-
-/**
- * Email + password sign-in, as a native <details> disclosure so the open/closed
- * state needs no React state or click-outside handling. On success the whole app
- * reloads - auth, org, role and health all have to refetch anyway.
- *
- * No "forgot password" link: there's no mailer yet, so a reset flow can't exist.
- * The OAuth buttons beside this are the recovery path.
- */
-function EmailAuthForm() {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await passwordAuthRequest(mode, email, password);
-      window.location.reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-      setBusy(false);
-    }
-  };
-
-  return (
-    <details className="relative">
-      <summary className="list-none cursor-pointer px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap">
-        Email
-      </summary>
-      <form
-        onSubmit={submit}
-        className="absolute right-0 z-20 mt-2 w-72 p-4 bg-white border border-gray-200 rounded-lg shadow-lg text-left"
-      >
-        <div className="flex gap-1 mb-3">
-          {(['login', 'signup'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                setMode(m);
-                setError(null);
-              }}
-              className={`flex-1 py-1.5 text-xs font-medium rounded ${
-                mode === m ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {m === 'login' ? 'Sign in' : 'Create account'}
-            </button>
-          ))}
-        </div>
-
-        <label className="block text-xs text-gray-500 mb-1" htmlFor="auth-email">
-          Email
-        </label>
-        <input
-          id="auth-email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full mb-3 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-
-        <label className="block text-xs text-gray-500 mb-1" htmlFor="auth-password">
-          Password
-        </label>
-        <input
-          id="auth-password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <p className="mt-1 text-[11px] text-gray-400">At least 8 characters.</p>
-
-        {error && (
-          <p role="alert" className="mt-2 text-xs text-red-600">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full mt-3 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account'}
-        </button>
-      </form>
-    </details>
-  );
-}
 
 interface TabButtonProps {
   active: boolean;

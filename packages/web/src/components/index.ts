@@ -6,3 +6,4 @@ export { ErrorTriage } from './ErrorTriage';
 export { ProjectsPanel } from './ProjectsPanel';
 export { ReadTokensPanel } from './ReadTokensPanel';
 export { MonitorsPanel } from './MonitorsPanel';
+export { SignInButton } from './SignInModal';
